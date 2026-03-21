@@ -24,10 +24,10 @@ npm run dev
 5. 網址會是 `https://<user>.github.io/<repo>/`
 
 > 若 repo 名稱變更，`next.config.mjs` 會依 `GITHUB_REPOSITORY` 自動設定 basePath。
-
 > 若你之後加入 `package-lock.json`，可把 workflow 的 `npm install` 改回 `npm ci` 以獲得更穩定的 CI。
 
 ## 環境變數（未來接 Firebase 時）
+
 建立 `.env.local`：
 ```bash
 NEXT_PUBLIC_FIREBASE_API_KEY=
@@ -39,6 +39,7 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 ```
 
 ## 題庫匯入驗證（本地）
+
 ```bash
 npm run import:questions -- data/sample-questions.json
 ```
