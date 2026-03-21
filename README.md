@@ -26,6 +26,7 @@ npm run dev
 > 若 repo 名稱變更，`next.config.mjs` 會依 `GITHUB_REPOSITORY` 自動設定 basePath。
 
 ## 環境變數（未來接 Firebase 時）
+
 建立 `.env.local`：
 ```bash
 NEXT_PUBLIC_FIREBASE_API_KEY=
@@ -37,6 +38,7 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 ```
 
 ## 題庫匯入驗證（本地）
+
 ```bash
 npm run import:questions -- data/sample-questions.json
 ```
