@@ -1,5 +1,4 @@
-
-name: Deploy Next.js site to Pages
+name: Deploy Next.js static site to GitHub Pages
 
 on:
   push:
@@ -16,7 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:
@@ -27,16 +25,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+          cache: npm
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build with Next.js
+      - name: Build static site
         run: npm run build
-        
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -46,8 +42,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    needs: build
     runs-on: ubuntu-latest
+    needs: build
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
