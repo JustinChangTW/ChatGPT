@@ -27,7 +27,7 @@ export default function AdminPage() {
     try {
       const parsed = JSON.parse(values.payload);
       const validated = validateQuestionImport(parsed);
-      setResult(validated.ok ? `匯入成功，共 ${validated.questions.length} 題` : `匯入失敗：${validated.errors.join('; ')}`);
+      setResult(validated.ok ? `匯入成功，共 ${validated.questions.length} 題（格式：${validated.normalizedFrom}）` : `匯入失敗：${validated.errors.join('; ')}`);
     } catch {
       setResult('JSON 格式錯誤');
     }
@@ -43,11 +43,28 @@ export default function AdminPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-2 rounded border bg-white p-4">
-        <textarea className="h-40 w-full rounded border p-2 font-mono text-xs" placeholder="貼上題庫 JSON" {...register('payload')} />
+        <textarea className="h-40 w-full rounded border p-2 font-mono text-xs" placeholder="貼上題庫 JSON（支援 full Question[] 或 simple-v1）" {...register('payload')} />
         {errors.payload && <p className="text-sm text-red-600">{errors.payload.message}</p>}
         <button className="rounded bg-blue-600 px-4 py-2 text-white" type="submit">驗證並匯入</button>
         {result && <p className="text-sm">{result}</p>}
       </form>
+
+
+      <div className="rounded border border-dashed bg-slate-50 p-3 text-xs text-slate-700">
+        <p className="mb-1 font-semibold">simple-v1 格式範例（可直接匯入）</p>
+        <pre className="overflow-auto whitespace-pre-wrap">{`{
+  "format": "simple-v1",
+  "questions": [
+    {
+      "chapterNo": 1,
+      "question": "題目文字",
+      "options": ["選項A", "選項B", "選項C", "選項D"],
+      "answer": "A",
+      "explanation": "詳解"
+    }
+  ]
+}`}</pre>
+      </div>
 
       <div className="grid gap-2 md:grid-cols-3">
         <select className="rounded border p-2" value={chapter} onChange={(e) => setChapter(e.target.value)}>
