@@ -20,7 +20,7 @@ npm run dev
 1. 將 repo 推到 GitHub 並把預設分支設為 `main`
 2. 到 GitHub Repo Settings → Pages
 3. Source 選 `GitHub Actions`
-4. push 到 `main` 後會自動執行 `.github/workflows/nextjs.yml`
+4. push 到 `main` 後會自動執行 `.github/workflows/nextjs.yml`（相容檔 `.github/workflows/deploy-gh-pages.yml` 也已提供）
 5. 網址會是 `https://<user>.github.io/<repo>/`
 
 > 若 repo 名稱變更，`next.config.mjs` 會依 `GITHUB_REPOSITORY` 自動設定 basePath。
