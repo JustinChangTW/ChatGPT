@@ -47,7 +47,7 @@ npm run import:questions -- data/sample-questions.json
 目前支援兩種格式：
 
 1. **Full 格式**：直接提供 `Question[]`（需含完整欄位，如 `id/chapter/domain/options/correctAnswer/explanation/...`）。
-2. **Simple 格式（推薦）**：`simple-v1`，只要提供「第 n 章、題目、選項、答案、說明」，其餘欄位可選填。
+2. **Simple 格式（推薦）**：`simple-v1`（`format` 欄位必填且必須為 `simple-v1`），只要提供「第 n 章、題目、選項、答案、說明」，其餘欄位可選填。
 
 ### Simple-v1 JSON 結構
 ```json

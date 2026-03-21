@@ -21,7 +21,7 @@ const simpleRowSchema = z.object({
 });
 
 const simpleImportSchema = z.object({
-  format: z.literal('simple-v1').optional(),
+  format: z.literal('simple-v1'),
   questions: z.array(simpleRowSchema).min(1)
 });
 
