@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { updateWrongAnswerEntry } from '@/lib/services/wrong-answer-service';
+import { updateWrongAnswerEntry } from '../lib/services/wrong-answer-service';
 
 describe('updateWrongAnswerEntry', () => {
   it('marks mastered after 3 consecutive corrects', () => {

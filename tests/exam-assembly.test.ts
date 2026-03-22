@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocateByWeight } from '@/lib/services/exam-assembly';
+import { allocateByWeight } from '../lib/services/exam-assembly';
 
 describe('allocateByWeight', () => {
   it('should allocate exact total', () => {

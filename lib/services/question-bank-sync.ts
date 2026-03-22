@@ -5,8 +5,10 @@ import { loadQuestionBank, saveQuestionBank } from '@/lib/services/local-questio
 
 export async function syncLocalQuestionBankToCloud(): Promise<{
   ok: boolean;
-  reason?: 'not-signed-in' | 'invalid-local-bank' | 'unknown';
+  reason?: 'firebase-not-configured' | 'not-signed-in' | 'invalid-local-bank' | 'unknown';
 }> {
+  if (!auth || !db) return { ok: false, reason: 'firebase-not-configured' };
+
   const user = auth.currentUser;
   if (!user) return { ok: false, reason: 'not-signed-in' };
 
@@ -34,8 +36,10 @@ export async function hydrateLocalQuestionBankFromCloud(): Promise<{
   ok: boolean;
   source?: 'cloud' | 'local';
   questions?: Question[];
-  reason?: 'not-signed-in' | 'no-cloud-data' | 'invalid-cloud-data' | 'unknown';
+  reason?: 'firebase-not-configured' | 'not-signed-in' | 'no-cloud-data' | 'invalid-cloud-data' | 'unknown';
 }> {
+  if (!auth || !db) return { ok: false, source: 'local', reason: 'firebase-not-configured' };
+
   const user = auth.currentUser;
   if (!user) return { ok: false, source: 'local', reason: 'not-signed-in' };
 

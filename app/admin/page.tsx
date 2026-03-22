@@ -29,6 +29,11 @@ export default function AdminPage() {
   useEffect(() => {
     setBank(loadQuestionBank());
 
+    if (!auth) {
+      setUserLabel('Firebase 未設定');
+      return;
+    }
+
     return onAuthStateChanged(auth, async (user) => {
       setUserLabel(user?.email ?? '未登入');
       if (!user) return;
@@ -76,6 +81,11 @@ export default function AdminPage() {
   };
 
   const loginGoogle = async () => {
+    if (!auth || !googleProvider) {
+      setResult('Firebase 環境變數未設定，無法 Google 登入。');
+      return;
+    }
+
     try {
       const cred = await signInWithPopup(auth, googleProvider);
       setUserLabel(cred.user.email ?? cred.user.uid);
@@ -86,6 +96,11 @@ export default function AdminPage() {
   };
 
   const logoutGoogle = async () => {
+    if (!auth) {
+      setResult('Firebase 未設定，無需登出。');
+      return;
+    }
+
     await signOut(auth);
     setUserLabel('未登入');
     setResult('已登出 Google。');

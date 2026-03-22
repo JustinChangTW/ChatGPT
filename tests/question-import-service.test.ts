@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateQuestionImport } from '@/lib/services/question-import-service';
+import { validateQuestionImport } from '../lib/services/question-import-service';
 
 describe('validateQuestionImport simple-v1', () => {
   it('accepts required simple-v1 format and maps to full question schema', () => {
