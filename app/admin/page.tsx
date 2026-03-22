@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
 import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { validateQuestionImport } from '@/lib/services/question-import-service';
@@ -211,7 +212,10 @@ export default function AdminPage() {
 
   const clearLearningProgress = () => {
     const confirmed = window.confirm('確定要重置目前學習進度嗎？這不會刪除題庫與 Firebase 設定。');
-    if (!confirmed) return;
+    if (!confirmed) {
+      setResult('已取消重置學習進度。');
+      return;
+    }
 
     const res = resetLearningProgress();
     setResult(res.removed.length > 0 ? `已重置學習進度（${res.removed.length} 個項目）。` : '目前沒有可重置的學習進度資料。');
@@ -227,8 +231,25 @@ export default function AdminPage() {
       const cred = await signInWithPopup(auth, googleProvider);
       setUserLabel(cred.user.email ?? cred.user.uid);
       setResult('Google 登入成功，可同步 Firebase 題庫。');
-    } catch {
-      setResult('Google 登入失敗，請檢查 Firebase Auth 設定。');
+    } catch (err) {
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+      const errCode = err instanceof FirebaseError ? err.code : '';
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const looksUnauthorizedDomain =
+        errCode === 'auth/unauthorized-domain' ||
+        /not authorized for OAuth operations/i.test(errMsg) ||
+        /authorized domains/i.test(errMsg);
+
+      if (looksUnauthorizedDomain) {
+        setResult(
+          `Google 登入失敗：網域未授權。請到 Firebase Console -> Authentication -> Settings -> Authorized domains 加入 ${hostname}。`
+        );
+        return;
+      }
+      setResult(
+        `Google 登入失敗，請檢查 Firebase Auth 設定（Authorized domains、Google Provider、OAuth 同意畫面）。` +
+          (errCode ? ` [${errCode}]` : '')
+      );
     }
   };
 
@@ -238,24 +259,36 @@ export default function AdminPage() {
       return;
     }
 
-    await signOut(auth);
-    setUserLabel('未登入');
-    setResult('已登出 Google。');
+    try {
+      await signOut(auth);
+      setUserLabel('未登入');
+      setResult('已登出 Google。');
+    } catch (err) {
+      setResult(`登出失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+    }
   };
 
   const pushCloud = async () => {
-    const res = await syncLocalQuestionBankToCloud();
-    setResult(res.ok ? '已將本機題庫同步到 Firebase。' : `同步失敗：${res.reason}`);
+    try {
+      const res = await syncLocalQuestionBankToCloud();
+      setResult(res.ok ? '已將本機題庫同步到 Firebase。' : `同步失敗：${res.reason}`);
+    } catch (err) {
+      setResult(`同步失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+    }
   };
 
   const pullCloud = async () => {
-    const res = await hydrateLocalQuestionBankFromCloud();
-    if (res.ok && res.questions) {
-      setBank(res.questions);
-      setResult(`已從 Firebase 拉取題庫，共 ${res.questions.length} 題。`);
-      return;
+    try {
+      const res = await hydrateLocalQuestionBankFromCloud();
+      if (res.ok && res.questions) {
+        setBank(res.questions);
+        setResult(`已從 Firebase 拉取題庫，共 ${res.questions.length} 題。`);
+        return;
+      }
+      setResult(`拉取失敗：${res.reason}`);
+    } catch (err) {
+      setResult(`拉取失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
     }
-    setResult(`拉取失敗：${res.reason}`);
   };
 
   const saveFirebaseSettings = () => {
@@ -272,15 +305,42 @@ export default function AdminPage() {
     setResult('已清除瀏覽器中的 Firebase 設定。');
   };
 
+  const copyCurrentDomain = async () => {
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+    try {
+      await navigator.clipboard.writeText(hostname);
+      setResult(`已複製網域：${hostname}`);
+    } catch {
+      setResult(`目前網域：${hostname}（請手動複製）`);
+    }
+  };
+
+  const openFirebaseAuthSettings = () => {
+    const pid = firebaseForm.projectId?.trim();
+    if (!pid) {
+      setResult('無法開啟 Firebase Console：Project ID 為空，請先確認 Firebase 設定。');
+      return;
+    }
+    const url = `https://console.firebase.google.com/project/${pid}/authentication/settings`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setResult('已開啟 Firebase Authentication 設定頁，請到 Authorized domains 加入目前網域。');
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
       <div className="rounded border bg-white p-3 text-sm">
         <p>目前狀態：{firebaseStatusText}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 grid grid-cols-2 gap-2 md:flex md:flex-wrap">
           <button
             className="rounded border px-3 py-1"
-            onClick={() => setShowFirebaseSettings((v) => !v)}
+            onClick={() =>
+              setShowFirebaseSettings((v) => {
+                const next = !v;
+                setResult(next ? '已展開 Firebase 設定區。' : '已收合 Firebase 設定區。');
+                return next;
+              })
+            }
           >
             {showFirebaseSettings ? '收合 Firebase 設定' : '展開 Firebase 設定'}
           </button>
@@ -318,6 +378,22 @@ export default function AdminPage() {
             Google/Firebase 功能已停用。請先在 GitHub Actions Secrets 或 .env.local 設定
             NEXT_PUBLIC_FIREBASE_*。
           </p>
+        )}
+        {hasFirebaseConfig && (
+          <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+            <p>若 Google 登入失敗並出現 unauthorized-domain，請把目前網域加入 Firebase Authorized domains。</p>
+            <p className="mt-1">
+              目前網域：<span className="font-mono">{typeof window !== 'undefined' ? window.location.hostname : '-'}</span>
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className="rounded border border-amber-300 bg-white px-2 py-1" onClick={copyCurrentDomain}>
+                複製目前網域
+              </button>
+              <button type="button" className="rounded border border-amber-300 bg-white px-2 py-1" onClick={openFirebaseAuthSettings}>
+                開啟 Firebase Auth 設定
+              </button>
+            </div>
+          </div>
         )}
 
         {showFirebaseSettings && (
@@ -370,7 +446,10 @@ export default function AdminPage() {
           <button
             type="button"
             className="mt-2 rounded border px-3 py-1"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              setResult('請選擇 JSON 檔案。');
+              fileInputRef.current?.click();
+            }}
           >
             選擇檔案
           </button>
@@ -384,12 +463,12 @@ export default function AdminPage() {
         </div>
 
         <textarea
-          className="h-40 w-full rounded border p-2 font-mono text-xs"
+          className="h-32 w-full rounded border p-2 font-mono text-xs md:h-40"
           placeholder="貼上題庫 JSON（支援 full Question[]、simple-v1、simple-v2-blueprint）"
           {...register('payload')}
         />
         {errors.payload && <p className="text-sm text-red-600">{errors.payload.message}</p>}
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <button className="rounded bg-blue-600 px-4 py-2 text-white" type="submit">
             驗證並匯入
           </button>
@@ -444,7 +523,14 @@ export default function AdminPage() {
               onChange={(e) => setChapter(e.target.value ? e.target.value : 'all')}
               placeholder="輸入或選擇 chapter"
             />
-            <button className="shrink-0 rounded border px-2 py-1 text-xs" type="button" onClick={() => setChapter('all')}>
+            <button
+              className="shrink-0 rounded border px-2 py-1 text-xs"
+              type="button"
+              onClick={() => {
+                setChapter('all');
+                setResult('已重置 Chapter 篩選。');
+              }}
+            >
               全部
             </button>
           </div>
@@ -472,7 +558,14 @@ export default function AdminPage() {
               }}
               placeholder="輸入 subdomain code 或名稱"
             />
-            <button className="shrink-0 rounded border px-2 py-1 text-xs" type="button" onClick={() => setSubdomainFilter('all')}>
+            <button
+              className="shrink-0 rounded border px-2 py-1 text-xs"
+              type="button"
+              onClick={() => {
+                setSubdomainFilter('all');
+                setResult('已重置 Subdomain 篩選。');
+              }}
+            >
               全部
             </button>
           </div>

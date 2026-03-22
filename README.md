@@ -271,6 +271,17 @@ workflow 取值優先順序：
 - Google 登入 / 同步到 Firebase / 從 Firebase 拉取 會被停用
 - 先設定 `.env.local`（本機）或 GitHub Actions Secrets（部署）後，重新 build 即可啟用
 
+若 console 顯示 `auth/unauthorized-domain`：
+1. 打開 Firebase Console → Authentication → Settings → Authorized domains
+2. 加入你的站點網域（例如 `justinchangtw.github.io`）
+3. 儲存後重新整理頁面再試一次 Google 登入
+
+若你「明明有加網域但還是不行」，再檢查：
+1. Firebase 專案是否正確（不要加到另一個 Firebase project）
+2. Authentication → Sign-in method 裡的 Google provider 是否已啟用
+3. Admin 頁面顯示的 hostname 是否就是你在 Authorized domains 加入的值（只填網域，不含 `https://` 與路徑）
+4. 修改後是否已重新整理頁面（必要時清除瀏覽器快取後再試）
+
 ### Step D：題庫同步流程（本專案已實作）
 - Admin 匯入 → 存到 localStorage
 - Google 登入後可按「同步到 Firebase」上傳到 `users/{uid}.questionBank`
