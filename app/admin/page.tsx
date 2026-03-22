@@ -9,6 +9,7 @@ import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { validateQuestionImport } from '@/lib/services/question-import-service';
 import { appendQuestionBank, loadQuestionBank, replaceQuestionBank, resetQuestionBank } from '@/lib/services/local-question-bank';
+import { resetLearningProgress } from '@/lib/services/learning-progress-storage';
 import { hydrateLocalQuestionBankFromCloud, syncLocalQuestionBankToCloud } from '@/lib/services/question-bank-sync';
 import { auth, googleProvider, hasFirebaseConfig } from '@/lib/firebase/client';
 import { chapterLabel, domainNoByName, parseChapterNo } from '@/lib/constants/cct-blueprint';
@@ -33,10 +34,8 @@ type FirebaseForm = {
 };
 
 export default function AdminPage() {
-  const DOMAIN_TOTAL = 20;
   const [result, setResult] = useState<string>('');
-  const [domain, setDomain] = useState<string>('all');
-  const [subdomainCode, setSubdomainCode] = useState<string>('all');
+  const [subdomainFilter, setSubdomainFilter] = useState<string>('all');
   const [chapter, setChapter] = useState<string>('all');
   const [type, setType] = useState<string>('all');
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
@@ -94,16 +93,7 @@ export default function AdminPage() {
 
   const chapterOptions = useMemo(() => [...new Set(bank.map((x) => x.chapter))], [bank]);
   const chapterInputListId = 'admin-chapter-options';
-
-  const resolveDomainNo = (q: Question): number | null => {
-    const byChapter = parseChapterNo(q.chapter);
-    if (byChapter && byChapter >= 1 && byChapter <= DOMAIN_TOTAL) return byChapter;
-
-    const matched = q.domain.match(/(?:D|Domain)\s*0?(\d{1,2})/i) ?? q.domain.match(/(\d{1,2})/);
-    if (!matched) return null;
-    const n = Number(matched[1]);
-    return Number.isFinite(n) && n >= 1 && n <= DOMAIN_TOTAL ? n : null;
-  };
+  const subdomainInputListId = 'admin-subdomain-options';
 
   const parseImportMeta = (q: Question): {
     questionNo: string | null;
@@ -131,12 +121,22 @@ export default function AdminPage() {
   const subdomainOptions = useMemo(
     () =>
       Array.from(
-        new Set(
-          bank
-            .map((q) => parseImportMeta(q).subdomainCode)
-            .filter((v): v is string => Boolean(v))
-        )
-      ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+        new Map(
+          bank.map((q) => {
+            const meta = parseImportMeta(q);
+            const key = meta.subdomainCode ? `code:${meta.subdomainCode}` : `name:${q.subdomain}`;
+            return [
+              key,
+              {
+                key,
+                code: meta.subdomainCode,
+                name: q.subdomain,
+                label: meta.subdomainCode ? `${meta.subdomainCode} - ${q.subdomain}` : q.subdomain
+              }
+            ];
+          })
+        ).values()
+      ).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })),
     [bank]
   );
 
@@ -192,13 +192,14 @@ export default function AdminPage() {
   const list = useMemo(
     () =>
       bank.filter(
-        (q) =>
-          (domain === 'all' || resolveDomainNo(q)?.toString() === domain) &&
-          (subdomainCode === 'all' || parseImportMeta(q).subdomainCode === subdomainCode) &&
+          (q) =>
+          (subdomainFilter === 'all' ||
+            parseImportMeta(q).subdomainCode === subdomainFilter ||
+            q.subdomain === subdomainFilter) &&
           (chapter === 'all' || q.chapter === chapter) &&
           (type === 'all' || q.questionType === type)
       ),
-    [bank, domain, subdomainCode, chapter, type]
+    [bank, subdomainFilter, chapter, type]
   );
 
   const clearImported = () => {
@@ -206,6 +207,14 @@ export default function AdminPage() {
     const restored = loadQuestionBank();
     setBank(restored);
     setResult('已清除本機匯入題庫，回到預設 sample 題庫。');
+  };
+
+  const clearLearningProgress = () => {
+    const confirmed = window.confirm('確定要重置目前學習進度嗎？這不會刪除題庫與 Firebase 設定。');
+    if (!confirmed) return;
+
+    const res = resetLearningProgress();
+    setResult(res.removed.length > 0 ? `已重置學習進度（${res.removed.length} 個項目）。` : '目前沒有可重置的學習進度資料。');
   };
 
   const loginGoogle = async () => {
@@ -387,6 +396,9 @@ export default function AdminPage() {
           <button className="rounded border px-4 py-2" type="button" onClick={clearImported}>
             清除本機匯入題庫
           </button>
+          <button className="rounded border border-red-300 px-4 py-2 text-red-700" type="button" onClick={clearLearningProgress}>
+            重置學習進度
+          </button>
         </div>
         {result && <p className="text-sm">{result}</p>}
       </form>
@@ -421,7 +433,7 @@ export default function AdminPage() {
 }`}</pre>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-4">
+      <div className="grid gap-2 md:grid-cols-3">
         <div className="rounded border p-2">
           <p className="mb-1 text-xs text-slate-500">Chapter（可搜尋）</p>
           <div className="flex gap-2">
@@ -443,35 +455,33 @@ export default function AdminPage() {
           </datalist>
         </div>
         <div className="rounded border p-2">
-          <p className="mb-1 text-xs text-slate-500">Domain（1~20）</p>
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            <button
-              type="button"
-              className={`rounded border px-2 py-1 text-xs ${domain === 'all' ? 'bg-slate-900 text-white' : 'bg-white'}`}
-              onClick={() => setDomain('all')}
-            >
-              All
+          <p className="mb-1 text-xs text-slate-500">Subdomain code（可搜尋）</p>
+          <div className="flex gap-2">
+            <input
+              className="w-full rounded border px-2 py-1"
+              list={subdomainInputListId}
+              value={subdomainFilter === 'all' ? '' : subdomainFilter}
+              onChange={(e) => {
+                const raw = e.target.value.trim();
+                if (!raw) {
+                  setSubdomainFilter('all');
+                  return;
+                }
+                const fromLabel = raw.includes(' - ') ? raw.split(' - ')[0] : raw;
+                setSubdomainFilter(fromLabel);
+              }}
+              placeholder="輸入 subdomain code 或名稱"
+            />
+            <button className="shrink-0 rounded border px-2 py-1 text-xs" type="button" onClick={() => setSubdomainFilter('all')}>
+              全部
             </button>
-            {Array.from({ length: DOMAIN_TOTAL }, (_, i) => (i + 1).toString()).map((domainNo) => (
-              <button
-                key={domainNo}
-                type="button"
-                className={`rounded border px-2 py-1 text-xs ${domain === domainNo ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                onClick={() => setDomain(domainNo)}
-              >
-                D{domainNo}
-              </button>
-            ))}
           </div>
+          <datalist id={subdomainInputListId}>
+            {subdomainOptions.map((x) => (
+              <option key={x.key} value={x.label} />
+            ))}
+          </datalist>
         </div>
-        <select className="rounded border p-2" value={subdomainCode} onChange={(e) => setSubdomainCode(e.target.value)}>
-          <option value="all">All subdomain code</option>
-          {subdomainOptions.map((x) => (
-            <option key={x} value={x}>
-              S{x}
-            </option>
-          ))}
-        </select>
         <select className="rounded border p-2" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="all">All type</option>
           <option value="theory">theory</option>
@@ -490,7 +500,7 @@ export default function AdminPage() {
                   <>
                     {q.id}
                     {meta.questionNo ? ` | Q${meta.questionNo}` : ''} | {chapterLabel(q.chapter)} | [D
-                    {meta.domainCode ?? resolveDomainNo(q) ?? domainNoByName(q.domain) ?? '-'}] {q.domain} |
+                    {meta.domainCode ?? parseChapterNo(q.chapter) ?? domainNoByName(q.domain) ?? '-'}] {q.domain} |
                     {meta.subdomainCode ? ` [S${meta.subdomainCode}]` : ''} {q.subdomain} | {q.questionType} | {q.sourceType}
                     {meta.classificationConfidence ? ` | confidence:${meta.classificationConfidence}` : ''}
                   </>

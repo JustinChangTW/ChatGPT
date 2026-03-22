@@ -253,6 +253,19 @@ workflow 取值優先順序：
 > 常見誤區：把 `FIREBASE_ENVIRONMENT` 當成「Environment 名稱」去建立一個 environment。  
 > `FIREBASE_ENVIRONMENT` 應該是 **Repository Variable**（值例如 `github-pages` 或 `production`），不是 secret 名稱。
 
+#### 一步一步設定（照做即可）
+1. 打開 `Repo Settings -> Secrets and variables -> Actions -> Variables`。  
+2. 新增 **Repository Variable**：`FIREBASE_ENVIRONMENT`，值填你想給 build 用的 environment 名稱（例如：`github-pages`）。  
+3. 打開 `Repo Settings -> Environments -> <你的環境名稱> -> Environment secrets`，建立以下 6 個 key：  
+   - `NEXT_PUBLIC_FIREBASE_API_KEY`
+   - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+   - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+   - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+   - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+   - `NEXT_PUBLIC_FIREBASE_APP_ID`
+4. 重新執行 GitHub Actions 的 deploy workflow（或 push 一次）。  
+5. 部署完成後打開 `/admin`，確認狀態不再顯示「Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）」。
+
 ### Google 登入按鈕沒有反應？
 若 Admin 顯示「Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）」，代表目前是本機模式：
 - Google 登入 / 同步到 Firebase / 從 Firebase 拉取 會被停用
