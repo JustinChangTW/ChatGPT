@@ -1,41 +1,30 @@
 {
-  "format": "simple-v1",
+  "format": "simple-v2-blueprint",
+  "sourceExam": "EC-Council CCT 212-82",
+  "classificationReference": "CCTv1-Exam-Blueprint",
   "questions": [
     {
+      "questionNo": 1,
       "chapterNo": 1,
-      "question": "下列何者最符合社交工程攻擊特徵？",
-      "options": [
-        "利用人性弱點取得敏感資訊",
-        "只使用硬體破壞",
-        "只發生在內網",
-        "與帳號密碼無關"
-      ],
-      "answer": "A",
-      "explanation": "社交工程通常利用信任、恐懼或急迫感來誘導使用者交出資訊。",
+      "domainCode": "1",
       "domain": "Information Security Threats and Attacks",
-      "subdomain": "Social Engineering",
+      "subdomainCode": "1.2",
+      "subdomain": "Information Security Attacks",
+      "question": "題目文字",
+      "options": ["選項A", "選項B", "選項C", "選項D"],
+      "answer": "A",
+      "explanation": "詳解",
       "questionType": "theory",
-      "difficulty": "easy",
-      "keywords": ["social engineering", "phishing"],
-      "tags": ["chapter-1", "mvp"]
-    },
-    {
-      "chapterNo": "第2章",
-      "question": "發現可疑流量時，第一步最適當的處置為何？",
-      "options": [
-        { "key": "A", "text": "直接重灌主機" },
-        { "key": "B", "text": "先確認 IDS/SIEM 告警與來源" },
-        { "key": "C", "text": "刪除所有日誌" },
-        { "key": "D", "text": "關閉防火牆" }
-      ],
-      "answer": "B",
-      "explanation": "事件處理需先驗證告警可信度與影響範圍，再進一步處置。",
-      "domain": "Network Monitoring and Analysis",
-      "subdomain": "Alert Triage",
-      "questionType": "practical",
       "difficulty": "medium",
-      "keywords": ["IDS", "SIEM", "triage"],
-      "tags": ["chapter-2", "practical"]
+      "keywords": ["sql injection"],
+      "tags": [
+        "chapter-1",
+        "domain-information-security-threats-and-attacks",
+        "subdomain-1.2"
+      ],
+      "sourceType": "original",
+      "classificationMethod": "blueprint_inference_from_question_text",
+      "classificationConfidence": "high"
     }
   ]
 }

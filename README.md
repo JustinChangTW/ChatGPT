@@ -44,16 +44,17 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 
 ## 題庫匯入驗證（本地）
 Admin 頁支援「貼上 JSON / 拖曳檔案 / 選擇檔案」三種匯入方式。
-Admin 篩選已支援 Chapter 與 Domain 藍圖連動，並顯示 Domain No（D1~D8）。
+Admin 篩選已支援 Chapter 搜尋與 Domain 快速篩選（D1~D20）。
 ```bash
 npm run import:questions -- data/sample-questions.json
 ```
 
 ## 匯入題庫格式（完整）
-目前支援兩種格式：
+目前支援三種格式：
 
 1. **Full 格式**：直接提供 `Question[]`（需含完整欄位，如 `id/chapter/domain/options/correctAnswer/explanation/...`）。
-2. **Simple 格式（推薦）**：`simple-v1`（`format` 欄位必填且必須為 `simple-v1`），只要提供「第 n 章、題目、選項、答案、說明」，其餘欄位可選填。
+2. **Simple-v1 格式（精簡）**：`format: "simple-v1"`，只要提供「第 n 章、題目、選項、答案、說明」，其餘欄位可選填。
+3. **Simple-v2-blueprint 格式（推薦）**：`format: "simple-v2-blueprint"`，可攜帶章節、domain/subdomain 編碼、分類方法與信心度等藍圖資訊。
 
 ### Simple-v1 JSON 結構
 ```json
@@ -86,6 +87,36 @@ npm run import:questions -- data/sample-questions.json
 - `domain/subdomain/questionType/difficulty/keywords/tags`：選填
 
 範例檔：`data/import-template.simple-v1.json`
+
+### Simple-v2-blueprint JSON 結構（推薦）
+```json
+{
+  "format": "simple-v2-blueprint",
+  "sourceExam": "EC-Council CCT 212-82",
+  "classificationReference": "CCTv1-Exam-Blueprint",
+  "questions": [
+    {
+      "questionNo": 1,
+      "chapterNo": 1,
+      "domainCode": "1",
+      "domain": "Information Security Threats and Attacks",
+      "subdomainCode": "1.2",
+      "subdomain": "Information Security Attacks",
+      "question": "題目文字",
+      "options": ["選項A", "選項B", "選項C", "選項D"],
+      "answer": "A",
+      "explanation": "詳解",
+      "questionType": "theory",
+      "difficulty": "medium",
+      "keywords": ["sql injection"],
+      "tags": ["chapter-1", "domain-information-security-threats-and-attacks", "subdomain-1.2"],
+      "sourceType": "original",
+      "classificationMethod": "blueprint_inference_from_question_text",
+      "classificationConfidence": "high"
+    }
+  ]
+}
+```
 
 > 匯入後資料會保存到瀏覽器 `localStorage`（key: `cct_question_bank_v1`），Chapter Practice / Exam Mode 會直接讀取此題庫。
 

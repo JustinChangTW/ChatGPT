@@ -339,7 +339,7 @@ export default function AdminPage() {
 
         <textarea
           className="h-40 w-full rounded border p-2 font-mono text-xs"
-          placeholder="貼上題庫 JSON（支援 full Question[] 或 simple-v1）"
+          placeholder="貼上題庫 JSON（支援 full Question[]、simple-v1、simple-v2-blueprint）"
           {...register('payload')}
         />
         {errors.payload && <p className="text-sm text-red-600">{errors.payload.message}</p>}
@@ -355,16 +355,30 @@ export default function AdminPage() {
       </form>
 
       <div className="rounded border border-dashed bg-slate-50 p-3 text-xs text-slate-700">
-        <p className="mb-1 font-semibold">simple-v1 格式範例（可直接匯入）</p>
+        <p className="mb-1 font-semibold">simple-v2-blueprint 格式範例（可直接匯入）</p>
         <pre className="overflow-auto whitespace-pre-wrap">{`{
-  "format": "simple-v1",
+  "format": "simple-v2-blueprint",
+  "sourceExam": "EC-Council CCT 212-82",
+  "classificationReference": "CCTv1-Exam-Blueprint",
   "questions": [
     {
+      "questionNo": 1,
       "chapterNo": 1,
+      "domainCode": "1",
+      "domain": "Information Security Threats and Attacks",
+      "subdomainCode": "1.2",
+      "subdomain": "Information Security Attacks",
       "question": "題目文字",
       "options": ["選項A", "選項B", "選項C", "選項D"],
       "answer": "A",
-      "explanation": "詳解"
+      "explanation": "詳解",
+      "questionType": "theory",
+      "difficulty": "medium",
+      "keywords": ["sql injection"],
+      "tags": ["chapter-1", "domain-information-security-threats-and-attacks", "subdomain-1.2"],
+      "sourceType": "original",
+      "classificationMethod": "blueprint_inference_from_question_text",
+      "classificationConfidence": "high"
     }
   ]
 }`}</pre>
