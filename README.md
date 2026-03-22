@@ -41,6 +41,8 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 > 若未設定 `NEXT_PUBLIC_FIREBASE_*`，系統會自動以「僅本機模式」運作（可匯入到 localStorage，但不啟用 Google/Firebase 同步），避免 GitHub Pages build 失敗。
 
 ## 題庫匯入驗證（本地）
+Admin 頁支援「貼上 JSON / 拖曳檔案 / 選擇檔案」三種匯入方式。
+Admin 篩選已支援 Chapter 與 Domain 藍圖連動，並顯示 Domain No（D1~D8）。
 ```bash
 npm run import:questions -- data/sample-questions.json
 ```
@@ -187,6 +189,22 @@ Workflow build step 可直接使用：
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
     NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
 ```
+
+
+
+### Admin 內建 Firebase 設定畫面（方便快速測試）
+若你不想每次重建部署，也可在 Admin 頁展開「Firebase 設定」：
+- 填入 `apiKey/authDomain/projectId/storageBucket/messagingSenderId/appId`
+- 點「儲存設定到瀏覽器」後，設定會記在 localStorage（僅此瀏覽器）
+- 重新整理後即可啟用 Google 登入與同步功能
+- 可用「清除瀏覽器設定」移除
+
+> 建議正式環境仍以 GitHub Secrets + build-time env 為主；Admin 設定畫面適合 demo/驗證使用。
+
+### Google 登入按鈕沒有反應？
+若 Admin 顯示「Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）」，代表目前是本機模式：
+- Google 登入 / 同步到 Firebase / 從 Firebase 拉取 會被停用
+- 先設定 `.env.local`（本機）或 GitHub Actions Secrets（部署）後，重新 build 即可啟用
 
 ### Step D：題庫同步流程（本專案已實作）
 - Admin 匯入 → 存到 localStorage

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { ChangeEventHandler, DragEventHandler, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,13 +10,27 @@ import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { validateQuestionImport } from '@/lib/services/question-import-service';
 import { appendQuestionBank, loadQuestionBank, resetQuestionBank } from '@/lib/services/local-question-bank';
 import { hydrateLocalQuestionBankFromCloud, syncLocalQuestionBankToCloud } from '@/lib/services/question-bank-sync';
-import { auth, googleProvider } from '@/lib/firebase/client';
+import { auth, googleProvider, hasFirebaseConfig } from '@/lib/firebase/client';
+import { CCT_DOMAIN_BLUEPRINT, chapterLabel, domainLabel, domainNoByName, parseChapterNo } from '@/lib/constants/cct-blueprint';
+import {
+  clearFirebaseRuntimeConfig,
+  loadFirebaseRuntimeConfig,
+  saveFirebaseRuntimeConfig
+} from '@/lib/services/firebase-runtime-config';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
 });
 
 type ImportForm = z.infer<typeof importSchema>;
+type FirebaseForm = {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+};
 
 export default function AdminPage() {
   const [result, setResult] = useState<string>('');
@@ -25,9 +39,24 @@ export default function AdminPage() {
   const [type, setType] = useState<string>('all');
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
   const [userLabel, setUserLabel] = useState<string>('未登入');
+  const [isDragging, setIsDragging] = useState(false);
+  const [showFirebaseSettings, setShowFirebaseSettings] = useState(false);
+  const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
+    apiKey: '',
+    authDomain: '',
+    projectId: '',
+    storageBucket: '',
+    messagingSenderId: '',
+    appId: ''
+  });
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setBank(loadQuestionBank());
+    const runtimeCfg = loadFirebaseRuntimeConfig();
+    if (runtimeCfg) {
+      setFirebaseForm(runtimeCfg);
+    }
 
     if (!auth) {
       setUserLabel('Firebase 未設定');
@@ -46,9 +75,61 @@ export default function AdminPage() {
     });
   }, []);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<ImportForm>({
+  const {
+    register,
+    setValue,
+    handleSubmit,
+    formState: { errors }
+  } = useForm<ImportForm>({
     resolver: zodResolver(importSchema)
   });
+
+  const firebaseStatusText = !hasFirebaseConfig
+    ? 'Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）'
+    : userLabel === '未登入'
+      ? 'Firebase 已設定，尚未登入'
+      : `已登入：${userLabel}`;
+
+  const chapterOptions = useMemo(() => [...new Set(bank.map((x) => x.chapter))], [bank]);
+  const domainOptions = useMemo(() => [...new Set(bank.map((x) => x.domain))], [bank]);
+
+  const linkedDomains = useMemo(() => {
+    if (chapter === 'all') return domainOptions;
+    const chapterNo = parseChapterNo(chapter);
+    const blueprintDomain = CCT_DOMAIN_BLUEPRINT.find((d) => d.domainNo === chapterNo)?.domain;
+    if (!blueprintDomain) return domainOptions;
+
+    return domainOptions.includes(blueprintDomain) ? [blueprintDomain] : domainOptions;
+  }, [chapter, domainOptions]);
+
+  useEffect(() => {
+    if (domain !== 'all' && !linkedDomains.includes(domain)) {
+      setDomain('all');
+    }
+  }, [domain, linkedDomains]);
+
+  const loadFile = async (file: File) => {
+    if (!file.name.endsWith('.json')) {
+      setResult('僅支援 .json 檔案');
+      return;
+    }
+
+    const text = await file.text();
+    setValue('payload', text, { shouldValidate: true });
+    setResult(`已讀取檔案：${file.name}`);
+  };
+
+  const onDropFile: DragEventHandler<HTMLDivElement> = async (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) await loadFile(file);
+  };
+
+  const onChooseFile: ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) await loadFile(file);
+  };
 
   const onSubmit = (values: ImportForm) => {
     try {
@@ -67,11 +148,16 @@ export default function AdminPage() {
     }
   };
 
-  const list = useMemo(() => bank.filter((q) =>
-    (domain === 'all' || q.domain === domain) &&
-    (chapter === 'all' || q.chapter === chapter) &&
-    (type === 'all' || q.questionType === type)
-  ), [bank, domain, chapter, type]);
+  const list = useMemo(
+    () =>
+      bank.filter(
+        (q) =>
+          (domain === 'all' || q.domain === domain) &&
+          (chapter === 'all' || q.chapter === chapter) &&
+          (type === 'all' || q.questionType === type)
+      ),
+    [bank, domain, chapter, type]
+  );
 
   const clearImported = () => {
     resetQuestionBank();
@@ -121,25 +207,144 @@ export default function AdminPage() {
     setResult(`拉取失敗：${res.reason}`);
   };
 
+  const saveFirebaseSettings = () => {
+    if (Object.values(firebaseForm).some((v) => !v.trim())) {
+      setResult('Firebase 設定欄位不得為空。');
+      return;
+    }
+    saveFirebaseRuntimeConfig(firebaseForm);
+    setResult('已儲存 Firebase 設定到瀏覽器。請重新整理頁面後再執行 Google 登入。');
+  };
+
+  const clearFirebaseSettings = () => {
+    clearFirebaseRuntimeConfig();
+    setResult('已清除瀏覽器中的 Firebase 設定。');
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
       <div className="rounded border bg-white p-3 text-sm">
-        <p>目前帳號：{userLabel}</p>
+        <p>目前狀態：{firebaseStatusText}</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          <button className="rounded bg-slate-900 px-3 py-1 text-white" onClick={loginGoogle}>Google 登入</button>
-          <button className="rounded border px-3 py-1" onClick={logoutGoogle}>登出</button>
-          <button className="rounded border px-3 py-1" onClick={pushCloud}>同步到 Firebase</button>
-          <button className="rounded border px-3 py-1" onClick={pullCloud}>從 Firebase 拉取</button>
+          <button
+            className="rounded border px-3 py-1"
+            onClick={() => setShowFirebaseSettings((v) => !v)}
+          >
+            {showFirebaseSettings ? '收合 Firebase 設定' : '展開 Firebase 設定'}
+          </button>
+          <button
+            className="rounded bg-slate-900 px-3 py-1 text-white disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={loginGoogle}
+            disabled={!hasFirebaseConfig}
+          >
+            Google 登入
+          </button>
+          <button
+            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={logoutGoogle}
+            disabled={!hasFirebaseConfig}
+          >
+            登出
+          </button>
+          <button
+            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={pushCloud}
+            disabled={!hasFirebaseConfig}
+          >
+            同步到 Firebase
+          </button>
+          <button
+            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={pullCloud}
+            disabled={!hasFirebaseConfig}
+          >
+            從 Firebase 拉取
+          </button>
         </div>
+        {!hasFirebaseConfig && (
+          <p className="mt-2 text-xs text-slate-500">
+            Google/Firebase 功能已停用。請先在 GitHub Actions Secrets 或 .env.local 設定
+            NEXT_PUBLIC_FIREBASE_*。
+          </p>
+        )}
+
+        {showFirebaseSettings && (
+          <div className="mt-3 grid gap-2 rounded border bg-slate-50 p-3 text-xs md:grid-cols-2">
+            {(
+              [
+                ['apiKey', 'API Key'],
+                ['authDomain', 'Auth Domain'],
+                ['projectId', 'Project ID'],
+                ['storageBucket', 'Storage Bucket'],
+                ['messagingSenderId', 'Messaging Sender ID'],
+                ['appId', 'App ID']
+              ] as const
+            ).map(([key, label]) => (
+              <label className="space-y-1" key={key}>
+                <span>{label}</span>
+                <input
+                  className="w-full rounded border px-2 py-1"
+                  value={firebaseForm[key]}
+                  onChange={(e) => setFirebaseForm((s) => ({ ...s, [key]: e.target.value }))}
+                />
+              </label>
+            ))}
+
+            <div className="md:col-span-2 flex gap-2">
+              <button type="button" className="rounded bg-blue-600 px-3 py-1 text-white" onClick={saveFirebaseSettings}>
+                儲存設定到瀏覽器
+              </button>
+              <button type="button" className="rounded border px-3 py-1" onClick={clearFirebaseSettings}>
+                清除瀏覽器設定
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-2 rounded border bg-white p-4">
-        <textarea className="h-40 w-full rounded border p-2 font-mono text-xs" placeholder="貼上題庫 JSON（支援 full Question[] 或 simple-v1）" {...register('payload')} />
+        <div
+          className={`rounded border-2 border-dashed p-4 text-center text-sm ${
+            isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50'
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={onDropFile}
+        >
+          <p>拖曳 JSON 檔到這裡，或</p>
+          <button
+            type="button"
+            className="mt-2 rounded border px-3 py-1"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            選擇檔案
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={onChooseFile}
+          />
+        </div>
+
+        <textarea
+          className="h-40 w-full rounded border p-2 font-mono text-xs"
+          placeholder="貼上題庫 JSON（支援 full Question[] 或 simple-v1）"
+          {...register('payload')}
+        />
         {errors.payload && <p className="text-sm text-red-600">{errors.payload.message}</p>}
         <div className="flex gap-2">
-          <button className="rounded bg-blue-600 px-4 py-2 text-white" type="submit">驗證並匯入</button>
-          <button className="rounded border px-4 py-2" type="button" onClick={clearImported}>清除本機匯入題庫</button>
+          <button className="rounded bg-blue-600 px-4 py-2 text-white" type="submit">
+            驗證並匯入
+          </button>
+          <button className="rounded border px-4 py-2" type="button" onClick={clearImported}>
+            清除本機匯入題庫
+          </button>
         </div>
         {result && <p className="text-sm">{result}</p>}
       </form>
@@ -163,11 +368,19 @@ export default function AdminPage() {
       <div className="grid gap-2 md:grid-cols-3">
         <select className="rounded border p-2" value={chapter} onChange={(e) => setChapter(e.target.value)}>
           <option value="all">All chapter</option>
-          {[...new Set(bank.map((x) => x.chapter))].map((x) => <option key={x}>{x}</option>)}
+          {chapterOptions.map((x) => (
+            <option key={x} value={x}>
+              {chapterLabel(x)}
+            </option>
+          ))}
         </select>
         <select className="rounded border p-2" value={domain} onChange={(e) => setDomain(e.target.value)}>
           <option value="all">All domain</option>
-          {[...new Set(bank.map((x) => x.domain))].map((x) => <option key={x}>{x}</option>)}
+          {linkedDomains.map((x) => (
+            <option key={x} value={x}>
+              {domainLabel(x)}
+            </option>
+          ))}
         </select>
         <select className="rounded border p-2" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="all">All type</option>
@@ -179,7 +392,11 @@ export default function AdminPage() {
       <div className="rounded border bg-white p-4 text-sm">
         <p className="mb-2 font-semibold">題目列表（{list.length}）</p>
         <ul className="space-y-1">
-          {list.map((q) => <li key={q.id}>{q.id} | {q.chapter} | {q.domain} | {q.questionType} | {q.sourceType}</li>)}
+          {list.map((q) => (
+            <li key={q.id}>
+              {q.id} | {chapterLabel(q.chapter)} | [D{domainNoByName(q.domain) ?? '-'}] {q.domain} | {q.questionType} | {q.sourceType}
+            </li>
+          ))}
         </ul>
       </div>
     </div>
