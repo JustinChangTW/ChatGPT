@@ -81,6 +81,8 @@ npm run import:questions -- data/sample-questions.json
 
 範例檔：`data/import-template.simple-v1.json`
 
+> 匯入後資料會保存到瀏覽器 `localStorage`（key: `cct_question_bank_v1`），Chapter Practice / Exam Mode 會直接讀取此題庫。
+
 
 ## 測試
 ```bash

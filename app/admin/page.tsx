@@ -1,11 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { validateQuestionImport } from '@/lib/services/question-import-service';
+import { appendQuestionBank, loadQuestionBank, resetQuestionBank } from '@/lib/services/local-question-bank';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -18,6 +20,11 @@ export default function AdminPage() {
   const [domain, setDomain] = useState<string>('all');
   const [chapter, setChapter] = useState<string>('all');
   const [type, setType] = useState<string>('all');
+  const [bank, setBank] = useState<Question[]>(sampleQuestions);
+
+  useEffect(() => {
+    setBank(loadQuestionBank());
+  }, []);
 
   const { register, handleSubmit, formState: { errors } } = useForm<ImportForm>({
     resolver: zodResolver(importSchema)
@@ -27,17 +34,31 @@ export default function AdminPage() {
     try {
       const parsed = JSON.parse(values.payload);
       const validated = validateQuestionImport(parsed);
-      setResult(validated.ok ? `匯入成功，共 ${validated.questions.length} 題（格式：${validated.normalizedFrom}）` : `匯入失敗：${validated.errors.join('; ')}`);
+      if (!validated.ok) {
+        setResult(`匯入失敗：${validated.errors.join('; ')}`);
+        return;
+      }
+
+      const merged = appendQuestionBank(validated.questions);
+      setBank(merged);
+      setResult(`匯入成功，共 ${validated.questions.length} 題（格式：${validated.normalizedFrom}），目前題庫總數：${merged.length}`);
     } catch {
       setResult('JSON 格式錯誤');
     }
   };
 
-  const list = useMemo(() => sampleQuestions.filter((q) =>
+  const list = useMemo(() => bank.filter((q) =>
     (domain === 'all' || q.domain === domain) &&
     (chapter === 'all' || q.chapter === chapter) &&
     (type === 'all' || q.questionType === type)
-  ), [domain, chapter, type]);
+  ), [bank, domain, chapter, type]);
+
+  const clearImported = () => {
+    resetQuestionBank();
+    const restored = loadQuestionBank();
+    setBank(restored);
+    setResult('已清除本機匯入題庫，回到預設 sample 題庫。');
+  };
 
   return (
     <div className="space-y-4">
@@ -45,10 +66,12 @@ export default function AdminPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-2 rounded border bg-white p-4">
         <textarea className="h-40 w-full rounded border p-2 font-mono text-xs" placeholder="貼上題庫 JSON（支援 full Question[] 或 simple-v1）" {...register('payload')} />
         {errors.payload && <p className="text-sm text-red-600">{errors.payload.message}</p>}
-        <button className="rounded bg-blue-600 px-4 py-2 text-white" type="submit">驗證並匯入</button>
+        <div className="flex gap-2">
+          <button className="rounded bg-blue-600 px-4 py-2 text-white" type="submit">驗證並匯入</button>
+          <button className="rounded border px-4 py-2" type="button" onClick={clearImported}>清除本機匯入題庫</button>
+        </div>
         {result && <p className="text-sm">{result}</p>}
       </form>
-
 
       <div className="rounded border border-dashed bg-slate-50 p-3 text-xs text-slate-700">
         <p className="mb-1 font-semibold">simple-v1 格式範例（可直接匯入）</p>
@@ -69,11 +92,11 @@ export default function AdminPage() {
       <div className="grid gap-2 md:grid-cols-3">
         <select className="rounded border p-2" value={chapter} onChange={(e) => setChapter(e.target.value)}>
           <option value="all">All chapter</option>
-          {[...new Set(sampleQuestions.map((x) => x.chapter))].map((x) => <option key={x}>{x}</option>)}
+          {[...new Set(bank.map((x) => x.chapter))].map((x) => <option key={x}>{x}</option>)}
         </select>
         <select className="rounded border p-2" value={domain} onChange={(e) => setDomain(e.target.value)}>
           <option value="all">All domain</option>
-          {[...new Set(sampleQuestions.map((x) => x.domain))].map((x) => <option key={x}>{x}</option>)}
+          {[...new Set(bank.map((x) => x.domain))].map((x) => <option key={x}>{x}</option>)}
         </select>
         <select className="rounded border p-2" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="all">All type</option>
