@@ -23,6 +23,8 @@ npm run dev
 4. push 到 `main` 後會自動執行 `.github/workflows/nextjs.yml`（相容檔 `.github/workflows/deploy-gh-pages.yml` 也已提供）
 5. 網址會是 `https://<user>.github.io/<repo>/`
 
+> 頁面底部會顯示目前版本與建置時間（Build: vxxxxxxx · YYYY-MM-DDTHH:mm:ssZ），方便確認 PR 是否已上版。
+
 > 若 repo 名稱變更，`next.config.mjs` 會依 `GITHUB_REPOSITORY` 自動設定 basePath。
 
 > 若你之後加入 `package-lock.json`，可把 workflow 的 `npm install` 改回 `npm ci` 以獲得更穩定的 CI。
@@ -200,6 +202,22 @@ Workflow build step 可直接使用：
 - 可用「清除瀏覽器設定」移除
 
 > 建議正式環境仍以 GitHub Secrets + build-time env 為主；Admin 設定畫面適合 demo/驗證使用。
+
+
+### 為什麼我在 GitHub 有填 Secrets，前端仍顯示 Firebase 未設定？
+常見原因是你把值放在 **Environment secrets**，但 build job 用到的是另一個 environment 名稱。
+
+本專案目前 build job 會使用：
+- `environment: ${{ vars.FIREBASE_ENVIRONMENT || 'github-pages' }}`
+
+也就是說：
+1. 若你沒設定 `FIREBASE_ENVIRONMENT`（Repository Variable），預設會讀 `github-pages` 這個 environment 的 secrets。
+2. 若你有設定 `FIREBASE_ENVIRONMENT=production`，就會改讀 `production` 這個 environment 的 secrets。
+3. 你也可以直接改用 **Repository secrets / variables**（不依賴 environment），workflow 一樣會讀。
+
+workflow 取值優先順序：
+- `secrets.NEXT_PUBLIC_FIREBASE_*`
+- 若沒有，再讀 `vars.NEXT_PUBLIC_FIREBASE_*`
 
 ### Google 登入按鈕沒有反應？
 若 Admin 顯示「Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）」，代表目前是本機模式：

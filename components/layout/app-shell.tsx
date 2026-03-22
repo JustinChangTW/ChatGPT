@@ -12,7 +12,13 @@ const navItems = [
   ['Admin', '/admin']
 ];
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  buildInfo
+}: {
+  children: ReactNode;
+  buildInfo: { version: string; buildTime: string };
+}) {
   return (
     <div className="min-h-screen">
       <header className="border-b bg-white">
@@ -25,6 +31,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <footer className="border-t bg-white">
+        <div className="mx-auto max-w-6xl px-4 py-3 text-xs text-slate-500">
+          Build: v{buildInfo.version} · {buildInfo.buildTime}
+        </div>
+      </footer>
     </div>
   );
 }
