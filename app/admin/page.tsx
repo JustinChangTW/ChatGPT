@@ -36,6 +36,7 @@ export default function AdminPage() {
   const DOMAIN_TOTAL = 20;
   const [result, setResult] = useState<string>('');
   const [domain, setDomain] = useState<string>('all');
+  const [subdomainCode, setSubdomainCode] = useState<string>('all');
   const [chapter, setChapter] = useState<string>('all');
   const [type, setType] = useState<string>('all');
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
@@ -104,6 +105,41 @@ export default function AdminPage() {
     return Number.isFinite(n) && n >= 1 && n <= DOMAIN_TOTAL ? n : null;
   };
 
+  const parseImportMeta = (q: Question): {
+    questionNo: string | null;
+    domainCode: string | null;
+    subdomainCode: string | null;
+    classificationMethod: string | null;
+    classificationConfidence: string | null;
+  } => {
+    const questionNoMatch = q.id.match(/import-v2-\d+-(.+)-\d+$/);
+    const domainCodeTag = q.tags.find((t) => t.startsWith('domain-'))?.replace('domain-', '') ?? null;
+    const subdomainCodeTag = q.tags.find((t) => t.startsWith('subdomain-'))?.replace('subdomain-', '') ?? null;
+    const classificationMethod =
+      q.tags.find((t) => t.startsWith('classification-'))?.replace('classification-', '') ?? null;
+    const classificationConfidence = q.tags.find((t) => t.startsWith('confidence-'))?.replace('confidence-', '') ?? null;
+
+    return {
+      questionNo: questionNoMatch?.[1] ?? null,
+      domainCode: domainCodeTag,
+      subdomainCode: subdomainCodeTag,
+      classificationMethod,
+      classificationConfidence
+    };
+  };
+
+  const subdomainOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          bank
+            .map((q) => parseImportMeta(q).subdomainCode)
+            .filter((v): v is string => Boolean(v))
+        )
+      ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    [bank]
+  );
+
   const loadFile = async (file: File) => {
     if (!file.name.endsWith('.json')) {
       setResult('僅支援 .json 檔案');
@@ -158,10 +194,11 @@ export default function AdminPage() {
       bank.filter(
         (q) =>
           (domain === 'all' || resolveDomainNo(q)?.toString() === domain) &&
+          (subdomainCode === 'all' || parseImportMeta(q).subdomainCode === subdomainCode) &&
           (chapter === 'all' || q.chapter === chapter) &&
           (type === 'all' || q.questionType === type)
       ),
-    [bank, domain, chapter, type]
+    [bank, domain, subdomainCode, chapter, type]
   );
 
   const clearImported = () => {
@@ -384,7 +421,7 @@ export default function AdminPage() {
 }`}</pre>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-4">
         <div className="rounded border p-2">
           <p className="mb-1 text-xs text-slate-500">Chapter（可搜尋）</p>
           <div className="flex gap-2">
@@ -427,6 +464,14 @@ export default function AdminPage() {
             ))}
           </div>
         </div>
+        <select className="rounded border p-2" value={subdomainCode} onChange={(e) => setSubdomainCode(e.target.value)}>
+          <option value="all">All subdomain code</option>
+          {subdomainOptions.map((x) => (
+            <option key={x} value={x}>
+              S{x}
+            </option>
+          ))}
+        </select>
         <select className="rounded border p-2" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="all">All type</option>
           <option value="theory">theory</option>
@@ -439,7 +484,18 @@ export default function AdminPage() {
         <ul className="space-y-1">
           {list.map((q) => (
             <li key={q.id}>
-              {q.id} | {chapterLabel(q.chapter)} | [D{resolveDomainNo(q) ?? domainNoByName(q.domain) ?? '-'}] {q.domain} | {q.questionType} | {q.sourceType}
+              {(() => {
+                const meta = parseImportMeta(q);
+                return (
+                  <>
+                    {q.id}
+                    {meta.questionNo ? ` | Q${meta.questionNo}` : ''} | {chapterLabel(q.chapter)} | [D
+                    {meta.domainCode ?? resolveDomainNo(q) ?? domainNoByName(q.domain) ?? '-'}] {q.domain} |
+                    {meta.subdomainCode ? ` [S${meta.subdomainCode}]` : ''} {q.subdomain} | {q.questionType} | {q.sourceType}
+                    {meta.classificationConfidence ? ` | confidence:${meta.classificationConfidence}` : ''}
+                  </>
+                );
+              })()}
             </li>
           ))}
         </ul>

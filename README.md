@@ -250,6 +250,9 @@ workflow 取值優先順序：
 - `secrets.NEXT_PUBLIC_FIREBASE_*`
 - 若沒有，再讀 `vars.NEXT_PUBLIC_FIREBASE_*`
 
+> 常見誤區：把 `FIREBASE_ENVIRONMENT` 當成「Environment 名稱」去建立一個 environment。  
+> `FIREBASE_ENVIRONMENT` 應該是 **Repository Variable**（值例如 `github-pages` 或 `production`），不是 secret 名稱。
+
 ### Google 登入按鈕沒有反應？
 若 Admin 顯示「Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）」，代表目前是本機模式：
 - Google 登入 / 同步到 Firebase / 從 Firebase 拉取 會被停用
