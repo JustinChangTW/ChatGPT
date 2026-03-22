@@ -35,6 +35,11 @@ export function appendQuestionBank(imported: Question[]): Question[] {
   return merged;
 }
 
+export function replaceQuestionBank(imported: Question[]): Question[] {
+  saveQuestionBank(imported);
+  return imported;
+}
+
 export function resetQuestionBank(): void {
   if (!isBrowser()) return;
   window.localStorage.removeItem(STORAGE_KEY);

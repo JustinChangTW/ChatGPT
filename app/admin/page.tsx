@@ -8,10 +8,10 @@ import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { validateQuestionImport } from '@/lib/services/question-import-service';
-import { appendQuestionBank, loadQuestionBank, resetQuestionBank } from '@/lib/services/local-question-bank';
+import { appendQuestionBank, loadQuestionBank, replaceQuestionBank, resetQuestionBank } from '@/lib/services/local-question-bank';
 import { hydrateLocalQuestionBankFromCloud, syncLocalQuestionBankToCloud } from '@/lib/services/question-bank-sync';
 import { auth, googleProvider, hasFirebaseConfig } from '@/lib/firebase/client';
-import { CCT_DOMAIN_BLUEPRINT, chapterLabel, domainLabel, domainNoByName, parseChapterNo } from '@/lib/constants/cct-blueprint';
+import { chapterLabel, domainNoByName, parseChapterNo } from '@/lib/constants/cct-blueprint';
 import {
   clearFirebaseRuntimeConfig,
   loadFirebaseRuntimeConfig,
@@ -33,6 +33,7 @@ type FirebaseForm = {
 };
 
 export default function AdminPage() {
+  const DOMAIN_TOTAL = 20;
   const [result, setResult] = useState<string>('');
   const [domain, setDomain] = useState<string>('all');
   const [chapter, setChapter] = useState<string>('all');
@@ -91,22 +92,17 @@ export default function AdminPage() {
       : `已登入：${userLabel}`;
 
   const chapterOptions = useMemo(() => [...new Set(bank.map((x) => x.chapter))], [bank]);
-  const domainOptions = useMemo(() => [...new Set(bank.map((x) => x.domain))], [bank]);
+  const chapterInputListId = 'admin-chapter-options';
 
-  const linkedDomains = useMemo(() => {
-    if (chapter === 'all') return domainOptions;
-    const chapterNo = parseChapterNo(chapter);
-    const blueprintDomain = CCT_DOMAIN_BLUEPRINT.find((d) => d.domainNo === chapterNo)?.domain;
-    if (!blueprintDomain) return domainOptions;
+  const resolveDomainNo = (q: Question): number | null => {
+    const byChapter = parseChapterNo(q.chapter);
+    if (byChapter && byChapter >= 1 && byChapter <= DOMAIN_TOTAL) return byChapter;
 
-    return domainOptions.includes(blueprintDomain) ? [blueprintDomain] : domainOptions;
-  }, [chapter, domainOptions]);
-
-  useEffect(() => {
-    if (domain !== 'all' && !linkedDomains.includes(domain)) {
-      setDomain('all');
-    }
-  }, [domain, linkedDomains]);
+    const matched = q.domain.match(/(?:D|Domain)\s*0?(\d{1,2})/i) ?? q.domain.match(/(\d{1,2})/);
+    if (!matched) return null;
+    const n = Number(matched[1]);
+    return Number.isFinite(n) && n >= 1 && n <= DOMAIN_TOTAL ? n : null;
+  };
 
   const loadFile = async (file: File) => {
     if (!file.name.endsWith('.json')) {
@@ -140,9 +136,18 @@ export default function AdminPage() {
         return;
       }
 
-      const merged = appendQuestionBank(validated.questions);
+      const existing = loadQuestionBank();
+      const shouldReplace =
+        existing.length > 0 &&
+        window.confirm(
+          `目前已有 ${existing.length} 題。按「確定」會刪除舊資料並改用本次匯入；按「取消」則保留舊資料並合併去重。`
+        );
+      const merged = shouldReplace ? replaceQuestionBank(validated.questions) : appendQuestionBank(validated.questions);
       setBank(merged);
-      setResult(`匯入成功，共 ${validated.questions.length} 題（格式：${validated.normalizedFrom}），目前題庫總數：${merged.length}`);
+      setResult(
+        `匯入成功，共 ${validated.questions.length} 題（格式：${validated.normalizedFrom}），` +
+          `模式：${shouldReplace ? '覆蓋舊資料' : '合併舊資料'}，目前題庫總數：${merged.length}`
+      );
     } catch {
       setResult('JSON 格式錯誤');
     }
@@ -152,7 +157,7 @@ export default function AdminPage() {
     () =>
       bank.filter(
         (q) =>
-          (domain === 'all' || q.domain === domain) &&
+          (domain === 'all' || resolveDomainNo(q)?.toString() === domain) &&
           (chapter === 'all' || q.chapter === chapter) &&
           (type === 'all' || q.questionType === type)
       ),
@@ -366,22 +371,48 @@ export default function AdminPage() {
       </div>
 
       <div className="grid gap-2 md:grid-cols-3">
-        <select className="rounded border p-2" value={chapter} onChange={(e) => setChapter(e.target.value)}>
-          <option value="all">All chapter</option>
-          {chapterOptions.map((x) => (
-            <option key={x} value={x}>
-              {chapterLabel(x)}
-            </option>
-          ))}
-        </select>
-        <select className="rounded border p-2" value={domain} onChange={(e) => setDomain(e.target.value)}>
-          <option value="all">All domain</option>
-          {linkedDomains.map((x) => (
-            <option key={x} value={x}>
-              {domainLabel(x)}
-            </option>
-          ))}
-        </select>
+        <div className="rounded border p-2">
+          <p className="mb-1 text-xs text-slate-500">Chapter（可搜尋）</p>
+          <div className="flex gap-2">
+            <input
+              className="w-full rounded border px-2 py-1"
+              list={chapterInputListId}
+              value={chapter === 'all' ? '' : chapter}
+              onChange={(e) => setChapter(e.target.value ? e.target.value : 'all')}
+              placeholder="輸入或選擇 chapter"
+            />
+            <button className="shrink-0 rounded border px-2 py-1 text-xs" type="button" onClick={() => setChapter('all')}>
+              全部
+            </button>
+          </div>
+          <datalist id={chapterInputListId}>
+            {chapterOptions.map((x) => (
+              <option key={x} value={x} label={chapterLabel(x)} />
+            ))}
+          </datalist>
+        </div>
+        <div className="rounded border p-2">
+          <p className="mb-1 text-xs text-slate-500">Domain（1~20）</p>
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            <button
+              type="button"
+              className={`rounded border px-2 py-1 text-xs ${domain === 'all' ? 'bg-slate-900 text-white' : 'bg-white'}`}
+              onClick={() => setDomain('all')}
+            >
+              All
+            </button>
+            {Array.from({ length: DOMAIN_TOTAL }, (_, i) => (i + 1).toString()).map((domainNo) => (
+              <button
+                key={domainNo}
+                type="button"
+                className={`rounded border px-2 py-1 text-xs ${domain === domainNo ? 'bg-blue-600 text-white' : 'bg-white'}`}
+                onClick={() => setDomain(domainNo)}
+              >
+                D{domainNo}
+              </button>
+            ))}
+          </div>
+        </div>
         <select className="rounded border p-2" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="all">All type</option>
           <option value="theory">theory</option>
@@ -394,7 +425,7 @@ export default function AdminPage() {
         <ul className="space-y-1">
           {list.map((q) => (
             <li key={q.id}>
-              {q.id} | {chapterLabel(q.chapter)} | [D{domainNoByName(q.domain) ?? '-'}] {q.domain} | {q.questionType} | {q.sourceType}
+              {q.id} | {chapterLabel(q.chapter)} | [D{resolveDomainNo(q) ?? domainNoByName(q.domain) ?? '-'}] {q.domain} | {q.questionType} | {q.sourceType}
             </li>
           ))}
         </ul>
