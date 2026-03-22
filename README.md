@@ -98,6 +98,17 @@ npm run test
 - `tests/`: 核心業務邏輯測試
 
 
+
+## localStorage 與 Firebase 同步策略（Google 登入後）
+目前採用「**離線優先 + 可手動同步**」：
+
+1. 匯入題庫先寫入本機 `localStorage`（`cct_question_bank_v1`）
+2. 使用者 Google 登入後，可在 Admin 點「同步到 Firebase」把本機題庫上傳到 `users/{uid}.questionBank`
+3. 也可點「從 Firebase 拉取」覆蓋本機題庫
+4. 下次登入時，系統會自動嘗試從 Firebase 拉取題庫
+
+> 若未登入，系統仍可用 localStorage 正常運作（GitHub Pages 靜態版可用）。
+
 ## Merge 前自動檢查（建議必開）
 - Workflow: `.github/workflows/pr-check.yml`
 - 觸發時機：PR 到 `main`

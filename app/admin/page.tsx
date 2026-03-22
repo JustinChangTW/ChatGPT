@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { validateQuestionImport } from '@/lib/services/question-import-service';
 import { appendQuestionBank, loadQuestionBank, resetQuestionBank } from '@/lib/services/local-question-bank';
+import { hydrateLocalQuestionBankFromCloud, syncLocalQuestionBankToCloud } from '@/lib/services/question-bank-sync';
+import { auth, googleProvider } from '@/lib/firebase/client';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -21,9 +24,21 @@ export default function AdminPage() {
   const [chapter, setChapter] = useState<string>('all');
   const [type, setType] = useState<string>('all');
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
+  const [userLabel, setUserLabel] = useState<string>('未登入');
 
   useEffect(() => {
     setBank(loadQuestionBank());
+
+    return onAuthStateChanged(auth, async (user) => {
+      setUserLabel(user?.email ?? '未登入');
+      if (!user) return;
+
+      const pulled = await hydrateLocalQuestionBankFromCloud();
+      if (pulled.ok && pulled.questions) {
+        setBank(pulled.questions);
+        setResult(`已從 Firebase 同步題庫，共 ${pulled.questions.length} 題`);
+      }
+    });
   }, []);
 
   const { register, handleSubmit, formState: { errors } } = useForm<ImportForm>({
@@ -60,9 +75,50 @@ export default function AdminPage() {
     setResult('已清除本機匯入題庫，回到預設 sample 題庫。');
   };
 
+  const loginGoogle = async () => {
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      setUserLabel(cred.user.email ?? cred.user.uid);
+      setResult('Google 登入成功，可同步 Firebase 題庫。');
+    } catch {
+      setResult('Google 登入失敗，請檢查 Firebase Auth 設定。');
+    }
+  };
+
+  const logoutGoogle = async () => {
+    await signOut(auth);
+    setUserLabel('未登入');
+    setResult('已登出 Google。');
+  };
+
+  const pushCloud = async () => {
+    const res = await syncLocalQuestionBankToCloud();
+    setResult(res.ok ? '已將本機題庫同步到 Firebase。' : `同步失敗：${res.reason}`);
+  };
+
+  const pullCloud = async () => {
+    const res = await hydrateLocalQuestionBankFromCloud();
+    if (res.ok && res.questions) {
+      setBank(res.questions);
+      setResult(`已從 Firebase 拉取題庫，共 ${res.questions.length} 題。`);
+      return;
+    }
+    setResult(`拉取失敗：${res.reason}`);
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
+      <div className="rounded border bg-white p-3 text-sm">
+        <p>目前帳號：{userLabel}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button className="rounded bg-slate-900 px-3 py-1 text-white" onClick={loginGoogle}>Google 登入</button>
+          <button className="rounded border px-3 py-1" onClick={logoutGoogle}>登出</button>
+          <button className="rounded border px-3 py-1" onClick={pushCloud}>同步到 Firebase</button>
+          <button className="rounded border px-3 py-1" onClick={pullCloud}>從 Firebase 拉取</button>
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-2 rounded border bg-white p-4">
         <textarea className="h-40 w-full rounded border p-2 font-mono text-xs" placeholder="貼上題庫 JSON（支援 full Question[] 或 simple-v1）" {...register('payload')} />
         {errors.payload && <p className="text-sm text-red-600">{errors.payload.message}</p>}
