@@ -7,6 +7,9 @@ import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { loadQuestionBank } from '@/lib/services/local-question-bank';
 import { assembleChapterPractice } from '@/lib/services/exam-assembly';
 import { loadChapterProgress, updateChapterProgress } from '@/lib/services/chapter-progress-storage';
+import { recordWrongNotebook } from '@/lib/services/wrong-notebook-storage';
+import { buildPracticeAttempt } from '@/lib/services/practice-attempt-service';
+import { savePracticeAttempt } from '@/lib/services/practice-attempt-storage';
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
 
@@ -60,6 +63,41 @@ export default function ChapterPracticePage() {
 
   const submitPractice = () => {
     if (!result) return;
+    const nowISO = new Date().toISOString();
+    const questionResults = result.detail
+      .filter((item) => item.userAnswer !== undefined)
+      .map((item) => ({
+        questionId: item.question.id,
+        sourceType: item.question.sourceType,
+        userAnswer: item.userAnswer as string | string[],
+        correctAnswer: item.question.correctAnswer,
+        isCorrect: item.correct,
+        chapter: item.question.chapter,
+        domain: item.question.domain,
+        questionType: item.question.questionType
+      }));
+    result.detail.forEach((item) => {
+      if (item.userAnswer === undefined) return;
+      recordWrongNotebook({
+        userId: 'local-user',
+        questionId: item.question.id,
+        isCorrect: item.correct,
+        selectedAnswer: Array.isArray(item.userAnswer) ? item.userAnswer : String(item.userAnswer),
+        nowISO
+      });
+    });
+    if (questionResults.length > 0) {
+      const attempt = buildPracticeAttempt({
+        id: `attempt-${Date.now()}`,
+        userId: 'local-user',
+        mode: 'chapter',
+        selectedChapter,
+        questionResults,
+        startedAt: new Date(Date.now() - 60_000).toISOString(),
+        submittedAt: nowISO
+      });
+      savePracticeAttempt(attempt);
+    }
     setSubmitted(true);
     updateChapterProgress({
       chapter: selectedChapter,
@@ -80,11 +118,11 @@ export default function ChapterPracticePage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Chapter Practice</h1>
       <p className="text-sm text-slate-500">目前本機題庫：{bank.length} 題（含 Admin 匯入）</p>
-      <div className="flex gap-2">
-        <select className="rounded border px-3 py-2" value={selectedChapter} onChange={(e) => setSelectedChapter(e.target.value)}>
+      <div className="grid gap-2 sm:flex">
+        <select className="w-full rounded border px-3 py-3 sm:w-auto" value={selectedChapter} onChange={(e) => setSelectedChapter(e.target.value)}>
           {chapters.map((ch) => <option key={ch}>{ch}</option>)}
         </select>
-        <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={startPractice}>開始 10 題練習</button>
+        <button className="rounded bg-blue-600 px-4 py-3 text-white" onClick={startPractice}>開始 10 題練習</button>
       </div>
       <div className="rounded border bg-white p-4">
         <p className="mb-2 text-sm font-semibold">章節進度追蹤</p>
@@ -93,7 +131,7 @@ export default function ChapterPracticePage() {
             const p = progress.find((x) => x.chapter === ch);
             const doneRate = p ? Math.round((p.completed / Math.max(p.attempts, 1)) * 100) : 0;
             return (
-              <li key={ch} className="flex justify-between border-b pb-1 last:border-b-0">
+              <li key={ch} className="flex flex-col gap-1 border-b pb-2 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                 <span>{ch}</span>
                 <span className="text-slate-600">
                   {p ? `完成 ${p.completed}/${p.attempts} 次 · 最近 ${p.lastScore} 分 · 完成率 ${doneRate}%` : '尚未作答'}
@@ -116,11 +154,11 @@ export default function ChapterPracticePage() {
               </label>
             ))}
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button className="rounded border px-3 py-1" onClick={prev}>上一題</button>
-            <button className="rounded border px-3 py-1" onClick={next}>下一題</button>
-            <button className="rounded bg-emerald-600 px-3 py-1 text-white" onClick={submitPractice}>交卷看結果</button>
-            <p className="self-center text-sm text-slate-500">已作答 {answeredCount}/{questions.length}</p>
+          <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+            <button className="rounded border px-3 py-2" onClick={prev}>上一題</button>
+            <button className="rounded border px-3 py-2" onClick={next}>下一題</button>
+            <button className="rounded bg-emerald-600 px-3 py-2 text-white" onClick={submitPractice}>交卷看結果</button>
+            <p className="self-center text-sm text-slate-500 sm:ml-1">已作答 {answeredCount}/{questions.length}</p>
           </div>
         </div>
       ) : null}

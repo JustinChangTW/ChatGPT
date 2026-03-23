@@ -2,20 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
-
-type WrongRow = {
-  questionId: string;
-  wrongCount: number;
-  chapter: string;
-  domain: string;
-  questionType: 'theory' | 'practical';
-  mastered: boolean;
-};
-
-const rows: WrongRow[] = [
-  { questionId: 'q-003', wrongCount: 4, chapter: '第3章', domain: 'Network Security Controls', questionType: 'practical', mastered: false },
-  { questionId: 'q-001', wrongCount: 3, chapter: '第1章', domain: 'Information Security Threats and Attacks', questionType: 'theory', mastered: true }
-];
+import { loadQuestionBank } from '@/lib/services/local-question-bank';
+import { loadWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 
 function aiTutorReply(question: string, explanation: string, history: { role: 'user' | 'assistant'; text: string }[]): string {
   const latest = history[history.length - 1]?.text ?? '';
@@ -26,15 +14,24 @@ export default function WrongNotebookPage() {
   const [openedId, setOpenedId] = useState<string | null>(null);
   const [ask, setAsk] = useState('');
   const [chat, setChat] = useState<Record<string, { role: 'user' | 'assistant'; text: string }[]>>({});
+  const [wrongRows] = useState(() => loadWrongNotebook());
 
-  const enriched = useMemo(
-    () =>
-      rows.map((r) => ({
-        ...r,
-        question: sampleQuestions.find((q) => q.id === r.questionId)
-      })),
-    []
-  );
+  const questionPool = useMemo(() => {
+    const local = loadQuestionBank();
+    const map = new Map([...sampleQuestions, ...local].map((q) => [q.id, q]));
+    return map;
+  }, []);
+
+  const enriched = useMemo(() => wrongRows.map((r) => {
+    const question = questionPool.get(r.questionId);
+    return {
+      ...r,
+      chapter: question?.chapter ?? '-',
+      domain: question?.domain ?? '-',
+      questionType: question?.questionType ?? 'theory',
+      question
+    };
+  }), [wrongRows, questionPool]);
 
   const sendAsk = (questionId: string, stem: string, explanation: string) => {
     const userText = ask.trim();
@@ -51,37 +48,56 @@ export default function WrongNotebookPage() {
       <p className="text-sm text-slate-500">
         可展開題目內容、查看詳解，並與 AI 助教互動追問。
       </p>
+      {enriched.length === 0 ? <p className="rounded border bg-white p-3 text-sm">目前沒有錯題紀錄。先去章節練習作答後，這裡會自動累積。</p> : null}
 
-      <table className="w-full overflow-hidden rounded border bg-white text-sm">
-        <thead className="bg-slate-100 text-left">
-          <tr>
-            <th className="p-2">Question</th>
-            <th className="p-2">Wrong</th>
-            <th className="p-2">Chapter</th>
-            <th className="p-2">Domain</th>
-            <th className="p-2">Type</th>
-            <th className="p-2">Mastered</th>
-            <th className="p-2">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {enriched.map((r) => (
-            <tr key={r.questionId} className="border-t">
-              <td className="p-2">{r.questionId}</td>
-              <td className="p-2">{r.wrongCount}</td>
-              <td className="p-2">{r.chapter}</td>
-              <td className="p-2">{r.domain}</td>
-              <td className="p-2">{r.questionType}</td>
-              <td className="p-2">{String(r.mastered)}</td>
-              <td className="p-2">
-                <button className="rounded border px-2 py-1" onClick={() => setOpenedId((x) => (x === r.questionId ? null : r.questionId))}>
-                  {openedId === r.questionId ? '收合' : '開啟'}
-                </button>
-              </td>
+      <div className="space-y-2 md:hidden">
+        {enriched.map((r) => (
+          <div key={`mobile-${r.questionId}`} className="rounded border bg-white p-3 text-sm">
+            <p className="font-semibold break-all">{r.questionId}</p>
+            <p className="mt-1 text-slate-600">錯誤次數：{r.wrongCount}</p>
+            <p className="text-slate-600">章節：{r.chapter}</p>
+            <p className="text-slate-600">領域：{r.domain}</p>
+            <p className="text-slate-600">題型：{r.questionType ?? '-'}</p>
+            <p className="text-slate-600">已掌握：{String(r.mastered)}</p>
+            <button className="mt-2 w-full rounded border px-2 py-2" onClick={() => setOpenedId((x) => (x === r.questionId ? null : r.questionId))}>
+              {openedId === r.questionId ? '收合' : '開啟'}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded border bg-white md:block">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-100 text-left">
+            <tr>
+              <th className="p-2">Question</th>
+              <th className="p-2">Wrong</th>
+              <th className="p-2">Chapter</th>
+              <th className="p-2">Domain</th>
+              <th className="p-2">Type</th>
+              <th className="p-2">Mastered</th>
+              <th className="p-2">操作</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {enriched.map((r) => (
+              <tr key={r.questionId} className="border-t">
+                <td className="p-2">{r.questionId}</td>
+                <td className="p-2">{r.wrongCount}</td>
+                <td className="p-2">{r.chapter}</td>
+                <td className="p-2">{r.domain}</td>
+                <td className="p-2">{r.questionType ?? '-'}</td>
+                <td className="p-2">{String(r.mastered)}</td>
+                <td className="p-2">
+                  <button className="rounded border px-2 py-1" onClick={() => setOpenedId((x) => (x === r.questionId ? null : r.questionId))}>
+                    {openedId === r.questionId ? '收合' : '開啟'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {openedId && (
         <div className="rounded-lg border bg-white p-4">
@@ -115,14 +131,14 @@ export default function WrongNotebookPage() {
                       </p>
                     ))}
                   </div>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 grid gap-2 sm:flex">
                     <input
                       className="w-full rounded border px-2 py-1"
                       placeholder="例如：為什麼我這題會錯？可追問細節。"
                       value={ask}
                       onChange={(e) => setAsk(e.target.value)}
                     />
-                    <button className="rounded bg-blue-600 px-3 py-1 text-white" onClick={() => sendAsk(openedId, q.stem, q.explanation)}>
+                    <button className="rounded bg-blue-600 px-3 py-2 text-white" onClick={() => sendAsk(openedId, q.stem, q.explanation)}>
                       詢問
                     </button>
                   </div>

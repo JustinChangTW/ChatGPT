@@ -25,7 +25,7 @@ export function loadChapterProgress(): ChapterProgressEntry[] {
   }
 }
 
-function saveChapterProgress(entries: ChapterProgressEntry[]): void {
+export function saveChapterProgress(entries: ChapterProgressEntry[]): void {
   if (!isBrowser()) return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
@@ -45,4 +45,3 @@ export function updateChapterProgress(input: { chapter: string; totalQuestions: 
   saveChapterProgress(merged);
   return next;
 }
-

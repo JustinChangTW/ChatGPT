@@ -267,6 +267,9 @@ workflow 取值優先順序：
 5. 部署完成後打開 `/admin`，確認狀態不再顯示「Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）」。
 
 ### Google 登入按鈕沒有反應？
+先釐清：**Google 登入不是必填**。  
+不登入也可以匯入題庫、章節練習、正式模擬考、錯題本與歷史分析；只有要做 Firebase 同步時才需要登入。
+
 若 Admin 顯示「Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）」，代表目前是本機模式：
 - Google 登入 / 同步到 Firebase / 從 Firebase 拉取 會被停用
 - 先設定 `.env.local`（本機）或 GitHub Actions Secrets（部署）後，重新 build 即可啟用
@@ -286,6 +289,21 @@ workflow 取值優先順序：
 - Admin 匯入 → 存到 localStorage
 - Google 登入後可按「同步到 Firebase」上傳到 `users/{uid}.questionBank`
 - 可按「從 Firebase 拉取」覆蓋本機題庫
+
+### 是否一定要 Google 登入？
+- **本機練習（不用雲端）**：不需要登入。
+- **要把資料回寫到 Firebase / 跨裝置同步（手機也讀得到）**：需要登入 Google（用來識別 `users/{uid}` 資料）。
+
+### 全量資料同步（題庫＋歷史＋錯題本＋章節進度）
+Admin 已提供：
+- 「全量同步到 Firebase」
+- 「全量從 Firebase 拉取」
+
+可把以下資料都同步到 Firebase：
+- `questionBank`
+- `practiceAttempts`
+- `wrongNotebook`
+- `chapterProgress`
 
 ### Step E：驗證
 1. 登入 Google

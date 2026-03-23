@@ -12,6 +12,7 @@ import { validateQuestionImport } from '@/lib/services/question-import-service';
 import { appendQuestionBank, loadQuestionBank, replaceQuestionBank, resetQuestionBank } from '@/lib/services/local-question-bank';
 import { resetLearningProgress } from '@/lib/services/learning-progress-storage';
 import { hydrateLocalQuestionBankFromCloud, syncLocalQuestionBankToCloud } from '@/lib/services/question-bank-sync';
+import { hydrateAllLocalDataFromCloud, syncAllLocalDataToCloud } from '@/lib/services/app-data-sync';
 import { auth, googleProvider, hasFirebaseConfig } from '@/lib/firebase/client';
 import { chapterLabel, domainNoByName, parseChapterNo } from '@/lib/constants/cct-blueprint';
 import {
@@ -291,6 +292,23 @@ export default function AdminPage() {
     }
   };
 
+  const pushAllCloud = async () => {
+    const res = await syncAllLocalDataToCloud();
+    setResult(res.ok ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度）」同步到 Firebase。' : `全量同步失敗：${res.reason}`);
+  };
+
+  const pullAllCloud = async () => {
+    const res = await hydrateAllLocalDataFromCloud();
+    if (res.ok && res.stats) {
+      setBank(loadQuestionBank());
+      setResult(
+        `已從 Firebase 拉取全部資料：題庫 ${res.stats.questionBank}、歷史 ${res.stats.practiceAttempts}、錯題本 ${res.stats.wrongNotebook}、章節進度 ${res.stats.chapterProgress}。`
+      );
+      return;
+    }
+    setResult(`全量拉取失敗：${res.reason}`);
+  };
+
   const saveFirebaseSettings = () => {
     if (Object.values(firebaseForm).some((v) => !v.trim())) {
       setResult('Firebase 設定欄位不得為空。');
@@ -331,9 +349,9 @@ export default function AdminPage() {
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
       <div className="rounded border bg-white p-3 text-sm">
         <p>目前狀態：{firebaseStatusText}</p>
-        <div className="mt-2 grid grid-cols-2 gap-2 md:flex md:flex-wrap">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:flex-wrap">
           <button
-            className="rounded border px-3 py-1"
+            className="rounded border px-3 py-2"
             onClick={() =>
               setShowFirebaseSettings((v) => {
                 const next = !v;
@@ -345,32 +363,46 @@ export default function AdminPage() {
             {showFirebaseSettings ? '收合 Firebase 設定' : '展開 Firebase 設定'}
           </button>
           <button
-            className="rounded bg-slate-900 px-3 py-1 text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded bg-slate-900 px-3 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
             onClick={loginGoogle}
             disabled={!hasFirebaseConfig}
           >
-            Google 登入
+            Google 登入（選用）
           </button>
           <button
-            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={logoutGoogle}
             disabled={!hasFirebaseConfig}
           >
             登出
           </button>
           <button
-            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={pushCloud}
             disabled={!hasFirebaseConfig}
           >
             同步到 Firebase
           </button>
           <button
-            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={pullCloud}
             disabled={!hasFirebaseConfig}
           >
             從 Firebase 拉取
+          </button>
+          <button
+            className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={pushAllCloud}
+            disabled={!hasFirebaseConfig}
+          >
+            全量同步到 Firebase
+          </button>
+          <button
+            className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={pullAllCloud}
+            disabled={!hasFirebaseConfig}
+          >
+            全量從 Firebase 拉取
           </button>
         </div>
         {!hasFirebaseConfig && (
@@ -379,6 +411,10 @@ export default function AdminPage() {
             NEXT_PUBLIC_FIREBASE_*。
           </p>
         )}
+        <p className="mt-2 text-xs text-slate-500">
+          不登入 Google 也可以：匯入題庫、章節練習、模擬考、錯題本與歷史分析都可在本機模式使用。
+          Google 登入只在你要「同步到 Firebase / 從 Firebase 拉取」時才需要。
+        </p>
         {hasFirebaseConfig && (
           <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
             <p>若 Google 登入失敗並出現 unauthorized-domain，請把目前網域加入 Firebase Authorized domains。</p>
@@ -418,11 +454,11 @@ export default function AdminPage() {
               </label>
             ))}
 
-            <div className="md:col-span-2 flex gap-2">
-              <button type="button" className="rounded bg-blue-600 px-3 py-1 text-white" onClick={saveFirebaseSettings}>
+            <div className="md:col-span-2 grid gap-2 sm:flex">
+              <button type="button" className="rounded bg-blue-600 px-3 py-2 text-white" onClick={saveFirebaseSettings}>
                 儲存設定到瀏覽器
               </button>
-              <button type="button" className="rounded border px-3 py-1" onClick={clearFirebaseSettings}>
+              <button type="button" className="rounded border px-3 py-2" onClick={clearFirebaseSettings}>
                 清除瀏覽器設定
               </button>
             </div>
@@ -445,7 +481,7 @@ export default function AdminPage() {
           <p>拖曳 JSON 檔到這裡，或</p>
           <button
             type="button"
-            className="mt-2 rounded border px-3 py-1"
+            className="mt-2 rounded border px-3 py-2"
             onClick={() => {
               setResult('請選擇 JSON 檔案。');
               fileInputRef.current?.click();
@@ -584,9 +620,9 @@ export default function AdminPage() {
 
       <div className="rounded border bg-white p-4 text-sm">
         <p className="mb-2 font-semibold">題目列表（{list.length}）</p>
-        <ul className="space-y-1">
+        <ul className="space-y-1 break-words">
           {list.map((q) => (
-            <li key={q.id}>
+            <li key={q.id} className="rounded border border-slate-100 bg-slate-50 p-2">
               {(() => {
                 const meta = parseImportMeta(q);
                 return (
