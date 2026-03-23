@@ -1,4 +1,5 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { FirebaseError } from 'firebase/app';
 import { db } from '@/lib/firebase/client';
 import { loadQuestionBank, saveQuestionBank } from '@/lib/services/local-question-bank';
 import { loadPracticeAttempts, replacePracticeAttempts } from '@/lib/services/practice-attempt-storage';
@@ -8,10 +9,10 @@ import { ensureFirebaseUser } from '@/lib/services/firebase-session';
 
 type SyncFailReason = 'firebase-not-configured' | 'auth-failed' | 'unknown';
 
-export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?: SyncFailReason }> {
+export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?: SyncFailReason | 'cloud-write-failed'; error?: string }> {
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
   const session = await ensureFirebaseUser();
-  if (!session.ok) return { ok: false, reason: session.reason };
+  if (!session.ok) return { ok: false, reason: session.reason, error: session.error };
 
   try {
     await setDoc(
@@ -29,19 +30,21 @@ export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?:
       { merge: true }
     );
     return { ok: true };
-  } catch {
-    return { ok: false, reason: 'unknown' };
+  } catch (err) {
+    const error = err instanceof FirebaseError ? `${err.code}: ${err.message}` : String(err);
+    return { ok: false, reason: 'cloud-write-failed', error };
   }
 }
 
 export async function hydrateAllLocalDataFromCloud(): Promise<{
   ok: boolean;
-  reason?: SyncFailReason | 'no-cloud-data';
+  reason?: SyncFailReason | 'no-cloud-data' | 'cloud-read-failed';
+  error?: string;
   stats?: { questionBank: number; practiceAttempts: number; wrongNotebook: number; chapterProgress: number };
 }> {
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
   const session = await ensureFirebaseUser();
-  if (!session.ok) return { ok: false, reason: session.reason };
+  if (!session.ok) return { ok: false, reason: session.reason, error: session.error };
 
   try {
     const snap = await getDoc(doc(db, 'users', session.uid));
@@ -62,7 +65,8 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
         chapterProgress: Array.isArray(data.chapterProgress) ? data.chapterProgress.length : 0
       }
     };
-  } catch {
-    return { ok: false, reason: 'unknown' };
+  } catch (err) {
+    const error = err instanceof FirebaseError ? `${err.code}: ${err.message}` : String(err);
+    return { ok: false, reason: 'cloud-read-failed', error };
   }
 }

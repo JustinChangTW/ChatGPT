@@ -342,7 +342,7 @@ export default function AdminPage() {
     try {
       const res = await syncLocalQuestionBankToCloud();
       logAction('firebase.pushQuestionBank', res.ok ? 'success' : 'fail', res);
-      setResult(res.ok ? '已將本機題庫同步到 Firebase。' : `同步失敗：${res.reason}`);
+      setResult(res.ok ? '已將本機題庫同步到 Firebase。' : `同步失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`);
     } catch (err) {
       logAction('firebase.pushQuestionBank', 'fail', { reason: err instanceof Error ? err.message : String(err) });
       setResult(`同步失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
@@ -360,7 +360,7 @@ export default function AdminPage() {
         return;
       }
       logAction('firebase.pullQuestionBank', 'fail', res);
-      setResult(`拉取失敗：${res.reason}`);
+      setResult(`拉取失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`);
     } catch (err) {
       logAction('firebase.pullQuestionBank', 'fail', { reason: err instanceof Error ? err.message : String(err) });
       setResult(`拉取失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
@@ -371,7 +371,11 @@ export default function AdminPage() {
     logAction('firebase.pushAllData', 'start');
     const res = await syncAllLocalDataToCloud();
     logAction('firebase.pushAllData', res.ok ? 'success' : 'fail', res);
-    setResult(res.ok ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度）」同步到 Firebase。' : `全量同步失敗：${res.reason}`);
+    setResult(
+      res.ok
+        ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度）」同步到 Firebase。'
+        : `全量同步失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`
+    );
   };
 
   const pullAllCloud = async () => {
@@ -386,7 +390,7 @@ export default function AdminPage() {
       return;
     }
     logAction('firebase.pullAllData', 'fail', res);
-    setResult(`全量拉取失敗：${res.reason}`);
+    setResult(`全量拉取失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`);
   };
 
   const saveFirebaseSettings = () => {

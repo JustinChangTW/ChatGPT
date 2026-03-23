@@ -300,6 +300,13 @@ workflow 取值優先順序：
 2. Firestore 規則維持 `request.auth != null`（匿名登入也有 `auth.uid`）
 3. Admin 可按「匿名連線 Firebase（免 Google）」；或直接按同步鈕，系統會自動嘗試匿名登入
 
+### 為什麼「看起來有按同步」但 Firebase 沒資料？
+常見原因：
+1. **Firebase Anonymous 尚未啟用**：會出現 `auth-failed` 或 `auth/operation-not-allowed`
+2. **Firestore 權限拒絕**：會出現 `cloud-write-failed | permission-denied`
+3. **讀錯使用者路徑**：本專案資料寫在 `users/{uid}`；若換了登入身份（含匿名 uid 變更）會看到不同資料集
+4. **題庫格式無效**：會出現 `invalid-local-bank`（本機資料不符合 schema）
+
 ### 全量資料同步（題庫＋歷史＋錯題本＋章節進度）
 Admin 已提供：
 - 「全量同步到 Firebase」
