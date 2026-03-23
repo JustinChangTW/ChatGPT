@@ -14,6 +14,7 @@ import { resetLearningProgress } from '@/lib/services/learning-progress-storage'
 import { hydrateLocalQuestionBankFromCloud, syncLocalQuestionBankToCloud } from '@/lib/services/question-bank-sync';
 import { hydrateAllLocalDataFromCloud, syncAllLocalDataToCloud } from '@/lib/services/app-data-sync';
 import { auth, googleProvider, hasFirebaseConfig } from '@/lib/firebase/client';
+import { ensureFirebaseUser } from '@/lib/services/firebase-session';
 import { chapterLabel, domainNoByName, parseChapterNo } from '@/lib/constants/cct-blueprint';
 import {
   clearFirebaseRuntimeConfig,
@@ -53,8 +54,30 @@ export default function AdminPage() {
     appId: ''
   });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const logAction = (action: string, status: 'start' | 'success' | 'fail', payload?: unknown) => {
+    const now = new Date().toISOString();
+    if (payload !== undefined) {
+      console.log(`[AdminAction][${now}] ${action} -> ${status}`, payload);
+      return;
+    }
+    console.log(`[AdminAction][${now}] ${action} -> ${status}`);
+  };
 
   useEffect(() => {
+    const onWindowError = (event: ErrorEvent) => {
+      logAction('window.error', 'fail', {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno
+      });
+    };
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      logAction('window.unhandledrejection', 'fail', { reason: String(event.reason) });
+    };
+    window.addEventListener('error', onWindowError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+
     setBank(loadQuestionBank());
     const runtimeCfg = loadFirebaseRuntimeConfig();
     if (runtimeCfg) {
@@ -66,7 +89,8 @@ export default function AdminPage() {
       return;
     }
 
-    return onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      logAction('auth.stateChanged', 'success', { user: user?.email ?? user?.uid ?? 'none' });
       setUserLabel(user?.email ?? '未登入');
       if (!user) return;
 
@@ -76,6 +100,12 @@ export default function AdminPage() {
         setResult(`已從 Firebase 同步題庫，共 ${pulled.questions.length} 題`);
       }
     });
+
+    return () => {
+      window.removeEventListener('error', onWindowError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+      unsubscribe();
+    };
   }, []);
 
   const {
@@ -90,7 +120,7 @@ export default function AdminPage() {
   const firebaseStatusText = !hasFirebaseConfig
     ? 'Firebase 未設定（NEXT_PUBLIC_FIREBASE_* 未注入）'
     : userLabel === '未登入'
-      ? 'Firebase 已設定，尚未登入'
+      ? 'Firebase 已設定，尚未登入（同步時會自動匿名登入）'
       : `已登入：${userLabel}`;
 
   const chapterOptions = useMemo(() => [...new Set(bank.map((x) => x.chapter))], [bank]);
@@ -143,13 +173,16 @@ export default function AdminPage() {
   );
 
   const loadFile = async (file: File) => {
+    logAction('import.loadFile', 'start', { name: file.name, size: file.size });
     if (!file.name.endsWith('.json')) {
+      logAction('import.loadFile', 'fail', { reason: 'not-json' });
       setResult('僅支援 .json 檔案');
       return;
     }
 
     const text = await file.text();
     setValue('payload', text, { shouldValidate: true });
+    logAction('import.loadFile', 'success', { chars: text.length });
     setResult(`已讀取檔案：${file.name}`);
   };
 
@@ -166,10 +199,12 @@ export default function AdminPage() {
   };
 
   const onSubmit = (values: ImportForm) => {
+    logAction('import.submit', 'start');
     try {
       const parsed = JSON.parse(values.payload);
       const validated = validateQuestionImport(parsed);
       if (!validated.ok) {
+        logAction('import.submit', 'fail', { reason: 'validate-fail', errors: validated.errors });
         setResult(`匯入失敗：${validated.errors.join('; ')}`);
         return;
       }
@@ -182,11 +217,17 @@ export default function AdminPage() {
         );
       const merged = shouldReplace ? replaceQuestionBank(validated.questions) : appendQuestionBank(validated.questions);
       setBank(merged);
+      logAction('import.submit', 'success', {
+        imported: validated.questions.length,
+        mode: shouldReplace ? 'replace' : 'merge',
+        total: merged.length
+      });
       setResult(
         `匯入成功，共 ${validated.questions.length} 題（格式：${validated.normalizedFrom}），` +
           `模式：${shouldReplace ? '覆蓋舊資料' : '合併舊資料'}，目前題庫總數：${merged.length}`
       );
     } catch {
+      logAction('import.submit', 'fail', { reason: 'json-parse-fail' });
       setResult('JSON 格式錯誤');
     }
   };
@@ -205,25 +246,32 @@ export default function AdminPage() {
   );
 
   const clearImported = () => {
+    logAction('bank.clearImported', 'start');
     resetQuestionBank();
     const restored = loadQuestionBank();
     setBank(restored);
+    logAction('bank.clearImported', 'success', { total: restored.length });
     setResult('已清除本機匯入題庫，回到預設 sample 題庫。');
   };
 
   const clearLearningProgress = () => {
+    logAction('progress.reset', 'start');
     const confirmed = window.confirm('確定要重置目前學習進度嗎？這不會刪除題庫與 Firebase 設定。');
     if (!confirmed) {
+      logAction('progress.reset', 'fail', { reason: 'user-cancelled' });
       setResult('已取消重置學習進度。');
       return;
     }
 
     const res = resetLearningProgress();
+    logAction('progress.reset', 'success', { removed: res.removed.length });
     setResult(res.removed.length > 0 ? `已重置學習進度（${res.removed.length} 個項目）。` : '目前沒有可重置的學習進度資料。');
   };
 
   const loginGoogle = async () => {
+    logAction('firebase.loginGoogle', 'start');
     if (!auth || !googleProvider) {
+      logAction('firebase.loginGoogle', 'fail', { reason: 'firebase-not-configured' });
       setResult('Firebase 環境變數未設定，無法 Google 登入。');
       return;
     }
@@ -231,6 +279,7 @@ export default function AdminPage() {
     try {
       const cred = await signInWithPopup(auth, googleProvider);
       setUserLabel(cred.user.email ?? cred.user.uid);
+      logAction('firebase.loginGoogle', 'success', { user: cred.user.email ?? cred.user.uid });
       setResult('Google 登入成功，可同步 Firebase 題庫。');
     } catch (err) {
       const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -242,11 +291,13 @@ export default function AdminPage() {
         /authorized domains/i.test(errMsg);
 
       if (looksUnauthorizedDomain) {
+        logAction('firebase.loginGoogle', 'fail', { reason: 'unauthorized-domain', hostname, errCode, errMsg });
         setResult(
           `Google 登入失敗：網域未授權。請到 Firebase Console -> Authentication -> Settings -> Authorized domains 加入 ${hostname}。`
         );
         return;
       }
+      logAction('firebase.loginGoogle', 'fail', { reason: 'unknown', errCode, errMsg });
       setResult(
         `Google 登入失敗，請檢查 Firebase Auth 設定（Authorized domains、Google Provider、OAuth 同意畫面）。` +
           (errCode ? ` [${errCode}]` : '')
@@ -254,8 +305,23 @@ export default function AdminPage() {
     }
   };
 
+  const connectAnonymous = async () => {
+    logAction('firebase.connectAnonymous', 'start');
+    const session = await ensureFirebaseUser();
+    if (!session.ok) {
+      logAction('firebase.connectAnonymous', 'fail', session);
+      setResult('匿名連線 Firebase 失敗，請確認 Firebase Authentication 已啟用 Anonymous。');
+      return;
+    }
+    setUserLabel(`匿名使用者 (${session.uid.slice(0, 8)}...)`);
+    logAction('firebase.connectAnonymous', 'success', session);
+    setResult('已建立匿名 Firebase 連線，可直接同步資料（不需 Google）。');
+  };
+
   const logoutGoogle = async () => {
+    logAction('firebase.logoutGoogle', 'start');
     if (!auth) {
+      logAction('firebase.logoutGoogle', 'fail', { reason: 'firebase-not-configured' });
       setResult('Firebase 未設定，無需登出。');
       return;
     }
@@ -263,84 +329,109 @@ export default function AdminPage() {
     try {
       await signOut(auth);
       setUserLabel('未登入');
+      logAction('firebase.logoutGoogle', 'success');
       setResult('已登出 Google。');
     } catch (err) {
+      logAction('firebase.logoutGoogle', 'fail', { reason: err instanceof Error ? err.message : String(err) });
       setResult(`登出失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
     }
   };
 
   const pushCloud = async () => {
+    logAction('firebase.pushQuestionBank', 'start');
     try {
       const res = await syncLocalQuestionBankToCloud();
+      logAction('firebase.pushQuestionBank', res.ok ? 'success' : 'fail', res);
       setResult(res.ok ? '已將本機題庫同步到 Firebase。' : `同步失敗：${res.reason}`);
     } catch (err) {
+      logAction('firebase.pushQuestionBank', 'fail', { reason: err instanceof Error ? err.message : String(err) });
       setResult(`同步失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
     }
   };
 
   const pullCloud = async () => {
+    logAction('firebase.pullQuestionBank', 'start');
     try {
       const res = await hydrateLocalQuestionBankFromCloud();
       if (res.ok && res.questions) {
         setBank(res.questions);
+        logAction('firebase.pullQuestionBank', 'success', { total: res.questions.length });
         setResult(`已從 Firebase 拉取題庫，共 ${res.questions.length} 題。`);
         return;
       }
+      logAction('firebase.pullQuestionBank', 'fail', res);
       setResult(`拉取失敗：${res.reason}`);
     } catch (err) {
+      logAction('firebase.pullQuestionBank', 'fail', { reason: err instanceof Error ? err.message : String(err) });
       setResult(`拉取失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
     }
   };
 
   const pushAllCloud = async () => {
+    logAction('firebase.pushAllData', 'start');
     const res = await syncAllLocalDataToCloud();
+    logAction('firebase.pushAllData', res.ok ? 'success' : 'fail', res);
     setResult(res.ok ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度）」同步到 Firebase。' : `全量同步失敗：${res.reason}`);
   };
 
   const pullAllCloud = async () => {
+    logAction('firebase.pullAllData', 'start');
     const res = await hydrateAllLocalDataFromCloud();
     if (res.ok && res.stats) {
       setBank(loadQuestionBank());
+      logAction('firebase.pullAllData', 'success', res.stats);
       setResult(
         `已從 Firebase 拉取全部資料：題庫 ${res.stats.questionBank}、歷史 ${res.stats.practiceAttempts}、錯題本 ${res.stats.wrongNotebook}、章節進度 ${res.stats.chapterProgress}。`
       );
       return;
     }
+    logAction('firebase.pullAllData', 'fail', res);
     setResult(`全量拉取失敗：${res.reason}`);
   };
 
   const saveFirebaseSettings = () => {
+    logAction('firebase.saveRuntimeConfig', 'start');
     if (Object.values(firebaseForm).some((v) => !v.trim())) {
+      logAction('firebase.saveRuntimeConfig', 'fail', { reason: 'empty-field' });
       setResult('Firebase 設定欄位不得為空。');
       return;
     }
     saveFirebaseRuntimeConfig(firebaseForm);
+    logAction('firebase.saveRuntimeConfig', 'success', { projectId: firebaseForm.projectId });
     setResult('已儲存 Firebase 設定到瀏覽器。請重新整理頁面後再執行 Google 登入。');
   };
 
   const clearFirebaseSettings = () => {
+    logAction('firebase.clearRuntimeConfig', 'start');
     clearFirebaseRuntimeConfig();
+    logAction('firebase.clearRuntimeConfig', 'success');
     setResult('已清除瀏覽器中的 Firebase 設定。');
   };
 
   const copyCurrentDomain = async () => {
+    logAction('firebase.copyCurrentDomain', 'start');
     const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
     try {
       await navigator.clipboard.writeText(hostname);
+      logAction('firebase.copyCurrentDomain', 'success', { hostname });
       setResult(`已複製網域：${hostname}`);
     } catch {
+      logAction('firebase.copyCurrentDomain', 'fail', { hostname });
       setResult(`目前網域：${hostname}（請手動複製）`);
     }
   };
 
   const openFirebaseAuthSettings = () => {
+    logAction('firebase.openAuthSettings', 'start');
     const pid = firebaseForm.projectId?.trim();
     if (!pid) {
+      logAction('firebase.openAuthSettings', 'fail', { reason: 'project-id-empty' });
       setResult('無法開啟 Firebase Console：Project ID 為空，請先確認 Firebase 設定。');
       return;
     }
     const url = `https://console.firebase.google.com/project/${pid}/authentication/settings`;
     window.open(url, '_blank', 'noopener,noreferrer');
+    logAction('firebase.openAuthSettings', 'success', { url });
     setResult('已開啟 Firebase Authentication 設定頁，請到 Authorized domains 加入目前網域。');
   };
 
@@ -368,6 +459,13 @@ export default function AdminPage() {
             disabled={!hasFirebaseConfig}
           >
             Google 登入（選用）
+          </button>
+          <button
+            className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={connectAnonymous}
+            disabled={!hasFirebaseConfig}
+          >
+            匿名連線 Firebase（免 Google）
           </button>
           <button
             className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -413,7 +511,7 @@ export default function AdminPage() {
         )}
         <p className="mt-2 text-xs text-slate-500">
           不登入 Google 也可以：匯入題庫、章節練習、模擬考、錯題本與歷史分析都可在本機模式使用。
-          Google 登入只在你要「同步到 Firebase / 從 Firebase 拉取」時才需要。
+          同步到 Firebase 時，系統會優先使用現有登入，否則自動匿名登入。
         </p>
         {hasFirebaseConfig && (
           <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">

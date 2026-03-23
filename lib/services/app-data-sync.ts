@@ -1,20 +1,21 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client';
+import { db } from '@/lib/firebase/client';
 import { loadQuestionBank, saveQuestionBank } from '@/lib/services/local-question-bank';
 import { loadPracticeAttempts, replacePracticeAttempts } from '@/lib/services/practice-attempt-storage';
 import { loadWrongNotebook, saveWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 import { loadChapterProgress, saveChapterProgress } from '@/lib/services/chapter-progress-storage';
+import { ensureFirebaseUser } from '@/lib/services/firebase-session';
 
-type SyncFailReason = 'firebase-not-configured' | 'not-signed-in' | 'unknown';
+type SyncFailReason = 'firebase-not-configured' | 'auth-failed' | 'unknown';
 
 export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?: SyncFailReason }> {
-  if (!auth || !db) return { ok: false, reason: 'firebase-not-configured' };
-  const user = auth.currentUser;
-  if (!user) return { ok: false, reason: 'not-signed-in' };
+  if (!db) return { ok: false, reason: 'firebase-not-configured' };
+  const session = await ensureFirebaseUser();
+  if (!session.ok) return { ok: false, reason: session.reason };
 
   try {
     await setDoc(
-      doc(db, 'users', user.uid),
+      doc(db, 'users', session.uid),
       {
         appData: {
           questionBank: loadQuestionBank(),
@@ -38,12 +39,12 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
   reason?: SyncFailReason | 'no-cloud-data';
   stats?: { questionBank: number; practiceAttempts: number; wrongNotebook: number; chapterProgress: number };
 }> {
-  if (!auth || !db) return { ok: false, reason: 'firebase-not-configured' };
-  const user = auth.currentUser;
-  if (!user) return { ok: false, reason: 'not-signed-in' };
+  if (!db) return { ok: false, reason: 'firebase-not-configured' };
+  const session = await ensureFirebaseUser();
+  if (!session.ok) return { ok: false, reason: session.reason };
 
   try {
-    const snap = await getDoc(doc(db, 'users', user.uid));
+    const snap = await getDoc(doc(db, 'users', session.uid));
     const data = snap.data()?.appData;
     if (!data) return { ok: false, reason: 'no-cloud-data' };
 
@@ -65,4 +66,3 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
     return { ok: false, reason: 'unknown' };
   }
 }
-

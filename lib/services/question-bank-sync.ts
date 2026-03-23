@@ -1,23 +1,23 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client';
+import { db } from '@/lib/firebase/client';
 import { Question, questionImportSchema } from '@/lib/schemas/question';
 import { loadQuestionBank, saveQuestionBank } from '@/lib/services/local-question-bank';
+import { ensureFirebaseUser } from '@/lib/services/firebase-session';
 
 export async function syncLocalQuestionBankToCloud(): Promise<{
   ok: boolean;
-  reason?: 'firebase-not-configured' | 'not-signed-in' | 'invalid-local-bank' | 'unknown';
+  reason?: 'firebase-not-configured' | 'auth-failed' | 'invalid-local-bank' | 'unknown';
 }> {
-  if (!auth || !db) return { ok: false, reason: 'firebase-not-configured' };
-
-  const user = auth.currentUser;
-  if (!user) return { ok: false, reason: 'not-signed-in' };
+  if (!db) return { ok: false, reason: 'firebase-not-configured' };
+  const session = await ensureFirebaseUser();
+  if (!session.ok) return { ok: false, reason: session.reason };
 
   try {
     const localBank = loadQuestionBank();
     const safeBank = questionImportSchema.parse(localBank);
 
     await setDoc(
-      doc(db, 'users', user.uid),
+      doc(db, 'users', session.uid),
       {
         questionBank: safeBank,
         questionBankUpdatedAt: serverTimestamp(),
@@ -36,15 +36,14 @@ export async function hydrateLocalQuestionBankFromCloud(): Promise<{
   ok: boolean;
   source?: 'cloud' | 'local';
   questions?: Question[];
-  reason?: 'firebase-not-configured' | 'not-signed-in' | 'no-cloud-data' | 'invalid-cloud-data' | 'unknown';
+  reason?: 'firebase-not-configured' | 'auth-failed' | 'no-cloud-data' | 'invalid-cloud-data' | 'unknown';
 }> {
-  if (!auth || !db) return { ok: false, source: 'local', reason: 'firebase-not-configured' };
-
-  const user = auth.currentUser;
-  if (!user) return { ok: false, source: 'local', reason: 'not-signed-in' };
+  if (!db) return { ok: false, source: 'local', reason: 'firebase-not-configured' };
+  const session = await ensureFirebaseUser();
+  if (!session.ok) return { ok: false, source: 'local', reason: session.reason };
 
   try {
-    const snap = await getDoc(doc(db, 'users', user.uid));
+    const snap = await getDoc(doc(db, 'users', session.uid));
     const data = snap.data();
 
     if (!data?.questionBank) {

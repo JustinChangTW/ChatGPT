@@ -292,7 +292,13 @@ workflow 取值優先順序：
 
 ### 是否一定要 Google 登入？
 - **本機練習（不用雲端）**：不需要登入。
-- **要把資料回寫到 Firebase / 跨裝置同步（手機也讀得到）**：需要登入 Google（用來識別 `users/{uid}` 資料）。
+- **要把資料回寫到 Firebase / 跨裝置同步（手機也讀得到）**：不一定要 Google。系統可用 Firebase Anonymous Auth 自動建立 `users/{uid}`。
+
+### 不用 Google 也可同步 Firebase（Anonymous Auth）
+若你不想讓使用者登入 Google，請在 Firebase Console：
+1. Authentication → Sign-in method → 啟用 **Anonymous**
+2. Firestore 規則維持 `request.auth != null`（匿名登入也有 `auth.uid`）
+3. Admin 可按「匿名連線 Firebase（免 Google）」；或直接按同步鈕，系統會自動嘗試匿名登入
 
 ### 全量資料同步（題庫＋歷史＋錯題本＋章節進度）
 Admin 已提供：
