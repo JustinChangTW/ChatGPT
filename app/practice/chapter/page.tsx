@@ -7,6 +7,8 @@ import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { loadQuestionBank } from '@/lib/services/local-question-bank';
 import { assembleChapterPractice } from '@/lib/services/exam-assembly';
 import { loadChapterProgress, updateChapterProgress } from '@/lib/services/chapter-progress-storage';
+import { loadChapterProgress, updateChapterProgress } from '@/lib/services/chapter-progress-storage';
+
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
 
@@ -14,6 +16,9 @@ export default function ChapterPracticePage() {
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
   const [progress, setProgress] = useState(loadChapterProgress());
   const [submitted, setSubmitted] = useState(false);
+  const [progress, setProgress] = useState(loadChapterProgress());
+  const [submitted, setSubmitted] = useState(false);
+
   const chapters = useMemo(() => {
     const set = new Set(bank.map((q) => q.chapter));
     return set.size > 0 ? Array.from(set) : fallbackChapters;
@@ -21,6 +26,8 @@ export default function ChapterPracticePage() {
 
   const [selectedChapter, setSelectedChapter] = useState(fallbackChapters[0]);
   const { questions, currentIndex, answers, setSession, setAnswer, next, prev, reset } = usePracticeStore();
+  const { questions, currentIndex, answers, setSession, setAnswer, next, prev, reset } = usePracticeStore();
+
 
   useEffect(() => {
     const loaded = loadQuestionBank();
@@ -51,6 +58,7 @@ export default function ChapterPracticePage() {
     return { detail, correctCount, score };
   }, [questions, answers]);
 
+
   const startPractice = async () => {
     const qs = await assembleChapterPractice(bank, selectedChapter);
     setSession({ sessionId: `chapter-${Date.now()}`, questions: qs });
@@ -73,6 +81,7 @@ export default function ChapterPracticePage() {
     reset();
     setSubmitted(false);
     await startPractice();
+
   };
 
   return (
@@ -144,6 +153,7 @@ export default function ChapterPracticePage() {
         </div>
       ) : null}
       {!current && <p>請先選章節開始測驗。</p>}
+
     </div>
   );
 }
