@@ -132,7 +132,6 @@ export default function WrongNotebookPage() {
           })()}
         </div>
       )}
-
     </div>
   );
 }
