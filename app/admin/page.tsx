@@ -4,7 +4,7 @@ import { ChangeEventHandler, DragEventHandler, useEffect, useMemo, useRef, useSt
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { getRedirectResult, onAuthStateChanged, signInWithRedirect, signOut } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
@@ -45,6 +45,8 @@ export default function AdminPage() {
   const [userLabel, setUserLabel] = useState<string>('未登入');
   const [isDragging, setIsDragging] = useState(false);
   const [showFirebaseSettings, setShowFirebaseSettings] = useState(false);
+  const [isQuickChecking, setIsQuickChecking] = useState(false);
+  const [currentHostname, setCurrentHostname] = useState('');
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
     apiKey: '',
     authDomain: '',
@@ -61,6 +63,14 @@ export default function AdminPage() {
       return;
     }
     console.log(`[AdminAction][${now}] ${action} -> ${status}`);
+  };
+  const runWithTimeout = async <T,>(action: string, task: Promise<T>, timeoutMs = 15000): Promise<T> => {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        window.setTimeout(() => reject(new Error(`${action} timeout (${timeoutMs}ms)`)), timeoutMs);
+      })
+    ]);
   };
 
   useEffect(() => {
@@ -79,6 +89,7 @@ export default function AdminPage() {
     window.addEventListener('unhandledrejection', onUnhandledRejection);
 
     setBank(loadQuestionBank());
+    setCurrentHostname(typeof window !== 'undefined' ? window.location.hostname : '');
     const runtimeCfg = loadFirebaseRuntimeConfig();
     if (runtimeCfg) {
       setFirebaseForm(runtimeCfg);
@@ -88,6 +99,17 @@ export default function AdminPage() {
       setUserLabel('Firebase 未設定');
       return;
     }
+
+    getRedirectResult(auth)
+      .then((cred) => {
+        if (!cred?.user) return;
+        logAction('firebase.loginGoogle.redirectResult', 'success', { user: cred.user.email ?? cred.user.uid });
+        setUserLabel(cred.user.email ?? cred.user.uid);
+        setResult('Google 重新導向登入成功。');
+      })
+      .catch((err) => {
+        logAction('firebase.loginGoogle.redirectResult', 'fail', { reason: err instanceof Error ? err.message : String(err) });
+      });
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       logAction('auth.stateChanged', 'success', { user: user?.email ?? user?.uid ?? 'none' });
@@ -277,10 +299,9 @@ export default function AdminPage() {
     }
 
     try {
-      const cred = await signInWithPopup(auth, googleProvider);
-      setUserLabel(cred.user.email ?? cred.user.uid);
-      logAction('firebase.loginGoogle', 'success', { user: cred.user.email ?? cred.user.uid });
-      setResult('Google 登入成功，可同步 Firebase 題庫。');
+      await signInWithRedirect(auth, googleProvider);
+      logAction('firebase.loginGoogle', 'success', { mode: 'redirect-started' });
+      setResult('正在導向 Google 登入…完成授權後會回到此頁。');
     } catch (err) {
       const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
       const errCode = err instanceof FirebaseError ? err.code : '';
@@ -339,8 +360,9 @@ export default function AdminPage() {
 
   const pushCloud = async () => {
     logAction('firebase.pushQuestionBank', 'start');
+    setResult('題庫同步中…（最多約 15 秒，完成後會顯示成功或失敗）');
     try {
-      const res = await syncLocalQuestionBankToCloud();
+      const res = await runWithTimeout('firebase.pushQuestionBank', syncLocalQuestionBankToCloud());
       logAction('firebase.pushQuestionBank', res.ok ? 'success' : 'fail', res);
       setResult(res.ok ? '已將本機題庫同步到 Firebase。' : `同步失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`);
     } catch (err) {
@@ -351,8 +373,9 @@ export default function AdminPage() {
 
   const pullCloud = async () => {
     logAction('firebase.pullQuestionBank', 'start');
+    setResult('題庫拉取中…（最多約 15 秒，完成後會顯示成功或失敗）');
     try {
-      const res = await hydrateLocalQuestionBankFromCloud();
+      const res = await runWithTimeout('firebase.pullQuestionBank', hydrateLocalQuestionBankFromCloud());
       if (res.ok && res.questions) {
         setBank(res.questions);
         logAction('firebase.pullQuestionBank', 'success', { total: res.questions.length });
@@ -369,28 +392,40 @@ export default function AdminPage() {
 
   const pushAllCloud = async () => {
     logAction('firebase.pushAllData', 'start');
-    const res = await syncAllLocalDataToCloud();
-    logAction('firebase.pushAllData', res.ok ? 'success' : 'fail', res);
-    setResult(
-      res.ok
-        ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度）」同步到 Firebase。'
-        : `全量同步失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`
-    );
+    setResult('全量同步中…（最多約 15 秒，完成後會顯示成功或失敗）');
+    try {
+      const res = await runWithTimeout('firebase.pushAllData', syncAllLocalDataToCloud());
+      logAction('firebase.pushAllData', res.ok ? 'success' : 'fail', res);
+      setResult(
+        res.ok
+          ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度）」同步到 Firebase。'
+          : `全量同步失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`
+      );
+    } catch (err) {
+      logAction('firebase.pushAllData', 'fail', { reason: err instanceof Error ? err.message : String(err) });
+      setResult(`全量同步失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+    }
   };
 
   const pullAllCloud = async () => {
     logAction('firebase.pullAllData', 'start');
-    const res = await hydrateAllLocalDataFromCloud();
-    if (res.ok && res.stats) {
-      setBank(loadQuestionBank());
-      logAction('firebase.pullAllData', 'success', res.stats);
-      setResult(
-        `已從 Firebase 拉取全部資料：題庫 ${res.stats.questionBank}、歷史 ${res.stats.practiceAttempts}、錯題本 ${res.stats.wrongNotebook}、章節進度 ${res.stats.chapterProgress}。`
-      );
-      return;
+    setResult('全量拉取中…（最多約 15 秒，完成後會顯示成功或失敗）');
+    try {
+      const res = await runWithTimeout('firebase.pullAllData', hydrateAllLocalDataFromCloud());
+      if (res.ok && res.stats) {
+        setBank(loadQuestionBank());
+        logAction('firebase.pullAllData', 'success', res.stats);
+        setResult(
+          `已從 Firebase 拉取全部資料：題庫 ${res.stats.questionBank}、歷史 ${res.stats.practiceAttempts}、錯題本 ${res.stats.wrongNotebook}、章節進度 ${res.stats.chapterProgress}。`
+        );
+        return;
+      }
+      logAction('firebase.pullAllData', 'fail', res);
+      setResult(`全量拉取失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`);
+    } catch (err) {
+      logAction('firebase.pullAllData', 'fail', { reason: err instanceof Error ? err.message : String(err) });
+      setResult(`全量拉取失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
     }
-    logAction('firebase.pullAllData', 'fail', res);
-    setResult(`全量拉取失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`);
   };
 
   const saveFirebaseSettings = () => {
@@ -437,6 +472,50 @@ export default function AdminPage() {
     window.open(url, '_blank', 'noopener,noreferrer');
     logAction('firebase.openAuthSettings', 'success', { url });
     setResult('已開啟 Firebase Authentication 設定頁，請到 Authorized domains 加入目前網域。');
+  };
+
+  const runQuickCheck = async () => {
+    logAction('diagnostic.quickCheck', 'start');
+    setIsQuickChecking(true);
+    const steps: Array<{ step: string; ok: boolean; detail: string }> = [];
+    const pushStep = (step: string, ok: boolean, detail: string) => steps.push({ step, ok, detail });
+
+    try {
+      pushStep('localStorage 可用', typeof window !== 'undefined' && !!window.localStorage, '本機儲存檢查');
+
+      if (!hasFirebaseConfig) {
+        pushStep('Firebase 設定', false, '未設定 NEXT_PUBLIC_FIREBASE_*');
+      } else {
+        pushStep('Firebase 設定', true, '已設定');
+
+        const session = await runWithTimeout('diagnostic.ensureFirebaseUser', ensureFirebaseUser(), 10000);
+        if (!session.ok) {
+          pushStep('Firebase 身份', false, `${session.reason}${session.error ? ` | ${session.error}` : ''}`);
+        } else {
+          pushStep('Firebase 身份', true, `${session.mode} (${session.uid.slice(0, 8)}...)`);
+
+          const pushAll = await runWithTimeout('diagnostic.pushAllData', syncAllLocalDataToCloud(), 15000);
+          pushStep('全量同步到 Firebase', !!pushAll.ok, pushAll.ok ? '成功' : `${pushAll.reason}${pushAll.error ? ` | ${pushAll.error}` : ''}`);
+
+          const pullAll = await runWithTimeout('diagnostic.pullAllData', hydrateAllLocalDataFromCloud(), 15000);
+          pushStep(
+            '全量從 Firebase 拉取',
+            !!pullAll.ok,
+            pullAll.ok && pullAll.stats
+              ? `成功（題庫${pullAll.stats.questionBank}/歷史${pullAll.stats.practiceAttempts}/錯題本${pullAll.stats.wrongNotebook}/章節${pullAll.stats.chapterProgress}）`
+              : `${pullAll.reason}${pullAll.error ? ` | ${pullAll.error}` : ''}`
+          );
+        }
+      }
+    } catch (err) {
+      pushStep('快速測通流程', false, err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsQuickChecking(false);
+      console.table(steps);
+      const summary = steps.map((s) => `${s.ok ? '✅' : '❌'} ${s.step}：${s.detail}`).join('；');
+      logAction('diagnostic.quickCheck', steps.every((s) => s.ok) ? 'success' : 'fail', steps);
+      setResult(`快速測通結果：${summary}`);
+    }
   };
 
   return (
@@ -506,6 +585,13 @@ export default function AdminPage() {
           >
             全量從 Firebase 拉取
           </button>
+          <button
+            className="rounded border border-emerald-300 px-3 py-2 text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={runQuickCheck}
+            disabled={isQuickChecking}
+          >
+            {isQuickChecking ? '快速測通中…' : '快速測通（自動檢查）'}
+          </button>
         </div>
         {!hasFirebaseConfig && (
           <p className="mt-2 text-xs text-slate-500">
@@ -521,7 +607,7 @@ export default function AdminPage() {
           <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
             <p>若 Google 登入失敗並出現 unauthorized-domain，請把目前網域加入 Firebase Authorized domains。</p>
             <p className="mt-1">
-              目前網域：<span className="font-mono">{typeof window !== 'undefined' ? window.location.hostname : '-'}</span>
+              目前網域：<span className="font-mono">{currentHostname || '-'}</span>
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" className="rounded border border-amber-300 bg-white px-2 py-1" onClick={copyCurrentDomain}>
