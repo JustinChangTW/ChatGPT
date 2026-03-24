@@ -324,6 +324,7 @@ Admin 已提供：
 3. 點「同步到 Firebase」
 4. 重新整理或換瀏覽器後，登入並點「從 Firebase 拉取」確認題目仍在
 
+<<<<<<< codex/create-cct-practice-web-app-specifications-9sbt25
 ### 快速測通（建議）
 若你覺得手動測試步驟太多，可到 Admin 按：
 - `快速測通（自動檢查）`
@@ -339,6 +340,8 @@ Admin 已提供：
 - 畫面結果文字（✅/❌）
 - 瀏覽器 console（`console.table`）
 
+=======
+>>>>>>> main
 ## Merge 前自動檢查（建議必開）
 - Workflow: `.github/workflows/pr-check.yml`
 - 觸發時機：PR 到 `main`
