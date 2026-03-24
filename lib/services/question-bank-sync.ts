@@ -3,16 +3,15 @@ import { FirebaseError } from 'firebase/app';
 import { db } from '@/lib/firebase/client';
 import { Question, questionImportSchema } from '@/lib/schemas/question';
 import { loadQuestionBank, saveQuestionBank } from '@/lib/services/local-question-bank';
-import { ensureFirebaseUser } from '@/lib/services/firebase-session';
+
+const SHARED_DOC = { collection: 'publicData', id: 'cctShared' } as const;
 
 export async function syncLocalQuestionBankToCloud(): Promise<{
   ok: boolean;
-  reason?: 'firebase-not-configured' | 'auth-failed' | 'invalid-local-bank' | 'cloud-write-failed' | 'unknown';
+  reason?: 'firebase-not-configured' | 'invalid-local-bank' | 'cloud-write-failed' | 'unknown';
   error?: string;
 }> {
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
-  const session = await ensureFirebaseUser();
-  if (!session.ok) return { ok: false, reason: session.reason, error: session.error };
 
   let safeBank: Question[] = [];
   try {
@@ -23,8 +22,8 @@ export async function syncLocalQuestionBankToCloud(): Promise<{
   }
 
   try {
-    await setDoc(doc(db, 'users', session.uid), { questionBank: safeBank, questionBankUpdatedAt: serverTimestamp(), questionBankVersion: 1 }, { merge: true });
-    return { ok: true, error: session.mode === 'anonymous' ? '使用匿名身份同步（同一瀏覽器可維持同 uid）' : undefined };
+    await setDoc(doc(db, SHARED_DOC.collection, SHARED_DOC.id), { questionBank: safeBank, questionBankUpdatedAt: serverTimestamp(), questionBankVersion: 1 }, { merge: true });
+    return { ok: true };
   } catch (err) {
     const error = err instanceof FirebaseError ? `${err.code}: ${err.message}` : String(err);
     return { ok: false, reason: 'cloud-write-failed', error };
@@ -35,16 +34,14 @@ export async function hydrateLocalQuestionBankFromCloud(): Promise<{
   ok: boolean;
   source?: 'cloud' | 'local';
   questions?: Question[];
-  reason?: 'firebase-not-configured' | 'auth-failed' | 'no-cloud-data' | 'invalid-cloud-data' | 'cloud-read-failed' | 'unknown';
+  reason?: 'firebase-not-configured' | 'no-cloud-data' | 'invalid-cloud-data' | 'cloud-read-failed' | 'unknown';
   error?: string;
 }> {
   if (!db) return { ok: false, source: 'local', reason: 'firebase-not-configured' };
-  const session = await ensureFirebaseUser();
-  if (!session.ok) return { ok: false, source: 'local', reason: session.reason, error: session.error };
 
   let data: Record<string, unknown> | undefined;
   try {
-    const snap = await getDoc(doc(db, 'users', session.uid));
+    const snap = await getDoc(doc(db, SHARED_DOC.collection, SHARED_DOC.id));
     data = snap.data();
   } catch (err) {
     const error = err instanceof FirebaseError ? `${err.code}: ${err.message}` : String(err);

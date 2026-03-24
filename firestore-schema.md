@@ -48,3 +48,21 @@
   generatorEnabled?: boolean;
 }
 ```
+
+## publicData/cctShared
+```ts
+{
+  questionBank?: Question[];
+  questionBankUpdatedAt?: Timestamp;
+  questionBankVersion?: number;
+  appData?: {
+    questionBank: Question[];
+    practiceAttempts: PracticeAttempt[];
+    wrongNotebook: WrongAnswer[];
+    chapterProgress: ChapterProgressEntry[];
+    updatedAt: Timestamp;
+    version: number;
+  };
+}
+```
+- 用途：共享資料池（不分使用者，所有訪客看到同一份資料）

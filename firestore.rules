@@ -9,6 +9,11 @@ service cloud.firestore {
       allow read, write: if isOwner(userId) || isAdmin();
     }
 
+    // Shared pool for demo/public mode (any visitor can read/write same dataset).
+    match /publicData/cctShared {
+      allow read, write: if true;
+    }
+
     match /questions/{questionId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();

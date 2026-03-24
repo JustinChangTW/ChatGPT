@@ -5,18 +5,16 @@ import { loadQuestionBank, saveQuestionBank } from '@/lib/services/local-questio
 import { loadPracticeAttempts, replacePracticeAttempts } from '@/lib/services/practice-attempt-storage';
 import { loadWrongNotebook, saveWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 import { loadChapterProgress, saveChapterProgress } from '@/lib/services/chapter-progress-storage';
-import { ensureFirebaseUser } from '@/lib/services/firebase-session';
 
-type SyncFailReason = 'firebase-not-configured' | 'auth-failed' | 'unknown';
+const SHARED_DOC = { collection: 'publicData', id: 'cctShared' } as const;
+type SyncFailReason = 'firebase-not-configured' | 'unknown';
 
 export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?: SyncFailReason | 'cloud-write-failed'; error?: string }> {
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
-  const session = await ensureFirebaseUser();
-  if (!session.ok) return { ok: false, reason: session.reason, error: session.error };
 
   try {
     await setDoc(
-      doc(db, 'users', session.uid),
+      doc(db, SHARED_DOC.collection, SHARED_DOC.id),
       {
         appData: {
           questionBank: loadQuestionBank(),
@@ -43,11 +41,9 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
   stats?: { questionBank: number; practiceAttempts: number; wrongNotebook: number; chapterProgress: number };
 }> {
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
-  const session = await ensureFirebaseUser();
-  if (!session.ok) return { ok: false, reason: session.reason, error: session.error };
 
   try {
-    const snap = await getDoc(doc(db, 'users', session.uid));
+    const snap = await getDoc(doc(db, SHARED_DOC.collection, SHARED_DOC.id));
     const data = snap.data()?.appData;
     if (!data) return { ok: false, reason: 'no-cloud-data' };
 

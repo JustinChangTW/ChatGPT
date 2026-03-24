@@ -287,7 +287,7 @@ workflow 取值優先順序：
 
 ### Step D：題庫同步流程（本專案已實作）
 - Admin 匯入 → 存到 localStorage
-- Google 登入後可按「同步到 Firebase」上傳到 `users/{uid}.questionBank`
+- 可按「同步到 Firebase」上傳到共享文件 `publicData/cctShared.questionBank`
 - 可按「從 Firebase 拉取」覆蓋本機題庫
 
 ### 是否一定要 Google 登入？
@@ -304,13 +304,16 @@ workflow 取值優先順序：
 常見原因：
 1. **Firebase Anonymous 尚未啟用**：會出現 `auth-failed` 或 `auth/operation-not-allowed`
 2. **Firestore 權限拒絕**：會出現 `cloud-write-failed | permission-denied`
-3. **讀錯使用者路徑**：本專案資料寫在 `users/{uid}`；若換了登入身份（含匿名 uid 變更）會看到不同資料集
+3. **讀錯文件路徑**：本專案共享資料寫在 `publicData/cctShared`；若看的是其他 collection/doc 會誤判成沒資料
 4. **題庫格式無效**：會出現 `invalid-local-bank`（本機資料不符合 schema）
 
 ### 全量資料同步（題庫＋歷史＋錯題本＋章節進度）
 Admin 已提供：
 - 「全量同步到 Firebase」
 - 「全量從 Firebase 拉取」
+
+> 目前預設為「共享資料池」模式：  
+> 會同步到同一份文件 `publicData/cctShared`，因此不論誰進入系統，拉取到的是同一份資料。
 
 可把以下資料都同步到 Firebase：
 - `questionBank`
@@ -324,7 +327,6 @@ Admin 已提供：
 3. 點「同步到 Firebase」
 4. 重新整理或換瀏覽器後，登入並點「從 Firebase 拉取」確認題目仍在
 
-<<<<<<< codex/create-cct-practice-web-app-specifications-9sbt25
 ### 快速測通（建議）
 若你覺得手動測試步驟太多，可到 Admin 按：
 - `快速測通（自動檢查）`
@@ -340,8 +342,23 @@ Admin 已提供：
 - 畫面結果文字（✅/❌）
 - 瀏覽器 console（`console.table`）
 
-=======
->>>>>>> main
+### Firebase 基本指引（官方文件）
+如果你是第一次接 Firebase，建議照下面順序：
+1. 建立 Firebase 專案（Console）
+2. 加入 Web App 並取得 `firebaseConfig`
+3. 啟用 Authentication（Google / Anonymous）
+4. 建立 Cloud Firestore（Native mode）
+5. 設定 Firestore Rules（本專案含 `firestore.rules`）
+6. 把 `NEXT_PUBLIC_FIREBASE_*` 放到 `.env.local` 或 GitHub Actions secrets
+
+官方參考（建議收藏）：
+- Firebase 快速開始（Web）：https://firebase.google.com/docs/web/setup
+- Firebase Authentication（Web）：https://firebase.google.com/docs/auth/web/start
+- Firebase Anonymous Auth：https://firebase.google.com/docs/auth/web/anonymous-auth
+- Cloud Firestore 快速開始：https://firebase.google.com/docs/firestore/quickstart
+- Firestore Security Rules：https://firebase.google.com/docs/firestore/security/get-started
+- Firebase Console：https://console.firebase.google.com/
+
 ## Merge 前自動檢查（建議必開）
 - Workflow: `.github/workflows/pr-check.yml`
 - 觸發時機：PR 到 `main`
