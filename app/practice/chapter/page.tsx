@@ -145,12 +145,13 @@ export default function ChapterPracticePage() {
       {current && !submitted ? (
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
-          <h2 className="mb-3 text-lg font-semibold">{current.stem}</h2>
+          <h2 className="mb-4 whitespace-pre-line text-lg font-semibold leading-8">{current.stem}</h2>
           <div className="space-y-2">
             {current.options.map((opt) => (
               <label className="block rounded-lg border p-3 transition hover:border-blue-400 hover:bg-blue-50" key={opt.key}>
                 <input type="radio" className="mr-2" name={current.id} checked={answers[current.id] === opt.key} onChange={() => setAnswer(current.id, opt.key)} />
-                <span className="font-medium">{opt.key}.</span> {opt.text}
+                <span className="font-medium">{opt.key}.</span>{' '}
+                <span className="whitespace-pre-line leading-7">{opt.text}</span>
               </label>
             ))}
           </div>
@@ -172,12 +173,12 @@ export default function ChapterPracticePage() {
           </div>
           {result.detail.map((item, idx) => (
             <div key={item.question.id} className="rounded-lg border bg-white p-4">
-              <p className="font-semibold">第 {idx + 1} 題：{item.question.stem}</p>
+              <p className="font-semibold whitespace-pre-line leading-8">第 {idx + 1} 題：{item.question.stem}</p>
               <p className={`mt-1 text-sm ${item.correct ? 'text-emerald-700' : 'text-rose-700'}`}>
                 {item.correct ? '✅ 答對' : '❌ 答錯'}｜你的答案：{Array.isArray(item.userAnswer) ? item.userAnswer.join(',') : item.userAnswer ?? '未作答'}
               </p>
               <p className="text-sm text-slate-600">正確答案：{Array.isArray(item.question.correctAnswer) ? item.question.correctAnswer.join(',') : item.question.correctAnswer}</p>
-              <p className="mt-2 text-sm text-slate-700">詳解：{item.question.explanation}</p>
+              <p className="mt-2 whitespace-pre-line text-sm leading-7 text-slate-700">詳解：{item.question.explanation}</p>
             </div>
           ))}
         </div>

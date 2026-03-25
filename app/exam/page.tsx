@@ -13,6 +13,7 @@ type ExamSession = {
   id: string;
   questions: Question[];
   answers: Record<string, string>;
+  currentIndex: number;
   createdAt: string;
   submitted: boolean;
 };
@@ -38,8 +39,24 @@ export default function ExamPage() {
 
   const current = useMemo(() => {
     if (!session) return null;
-    return session.questions.find((q) => !session.answers[q.id]) ?? session.questions[0];
+    return session.questions[session.currentIndex] ?? session.questions[0] ?? null;
   }, [session]);
+
+  const goToQuestion = (index: number) => {
+    setSession((s) => {
+      if (!s) return s;
+      const next = Math.min(Math.max(index, 0), s.questions.length - 1);
+      return { ...s, currentIndex: next };
+    });
+  };
+
+  const prevQuestion = () => {
+    setSession((s) => (s ? { ...s, currentIndex: Math.max(s.currentIndex - 1, 0) } : s));
+  };
+
+  const nextQuestion = () => {
+    setSession((s) => (s ? { ...s, currentIndex: Math.min(s.currentIndex + 1, s.questions.length - 1) } : s));
+  };
 
   const submitExam = () => {
     if (!session || session.submitted) return;
@@ -77,6 +94,7 @@ export default function ExamPage() {
       id: `exam-${Date.now()}`,
       questions: shuffled(assembled),
       answers: {},
+      currentIndex: 0,
       createdAt: new Date().toISOString(),
       submitted: false
     });
@@ -98,10 +116,10 @@ export default function ExamPage() {
 
       {session ? (
         <div className="rounded-lg border bg-white p-4">
-          <p className="text-sm text-slate-500">試券編號：{session.id} · 已作答 {answeredCount}/{session.questions.length}</p>
+          <p className="text-sm text-slate-500">試券編號：{session.id} · 第 {session.currentIndex + 1}/{session.questions.length} 題 · 已作答 {answeredCount}/{session.questions.length}</p>
           {current ? (
             <div className="mt-2">
-              <p className="font-semibold">{current.stem}</p>
+              <p className="font-semibold whitespace-pre-line leading-8">{current.stem}</p>
               <div className="mt-2 space-y-1">
                 {current.options.map((o) => (
                   <label key={o.key} className="block rounded border p-2">
@@ -118,15 +136,53 @@ export default function ExamPage() {
                         )
                       }
                     />
-                    {o.key}. {o.text}
+                    {o.key}. <span className="whitespace-pre-line leading-7">{o.text}</span>
                   </label>
                 ))}
               </div>
             </div>
           ) : null}
-          <button className="mt-3 w-full rounded border px-3 py-2 sm:w-auto" onClick={submitExam} disabled={session.submitted}>
-            {session.submitted ? '已交卷' : '交卷'}
-          </button>
+          <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
+            <button className="rounded border px-3 py-2" onClick={prevQuestion} disabled={session.submitted || session.currentIndex === 0}>
+              上一題
+            </button>
+            <button
+              className="rounded border px-3 py-2"
+              onClick={nextQuestion}
+              disabled={session.submitted || session.currentIndex >= session.questions.length - 1}
+            >
+              下一題
+            </button>
+            <button className="rounded border px-3 py-2 sm:w-auto" onClick={submitExam} disabled={session.submitted}>
+              {session.submitted ? '已交卷' : '交卷'}
+            </button>
+          </div>
+          <div className="mt-4 border-t pt-3">
+            <p className="mb-2 text-sm text-slate-600">題號導覽（已作答會變色）</p>
+            <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+              {session.questions.map((q, idx) => {
+                const answered = session.answers[q.id] !== undefined;
+                const active = session.currentIndex === idx;
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => goToQuestion(idx)}
+                    className={`rounded border px-2 py-2 text-sm ${
+                      active
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : answered
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-300 bg-white text-slate-700'
+                    }`}
+                    disabled={session.submitted}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       ) : null}
 
