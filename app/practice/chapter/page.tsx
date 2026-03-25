@@ -10,6 +10,8 @@ import { loadChapterProgress, updateChapterProgress } from '@/lib/services/chapt
 import { recordWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 import { buildPracticeAttempt } from '@/lib/services/practice-attempt-service';
 import { savePracticeAttempt } from '@/lib/services/practice-attempt-storage';
+import { lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
+import { addVocabularyEntry } from '@/lib/services/vocabulary-storage';
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
 
@@ -23,6 +25,13 @@ export default function ChapterPracticePage() {
   }, [bank]);
 
   const [selectedChapter, setSelectedChapter] = useState(fallbackChapters[0]);
+  const [selectedWord, setSelectedWord] = useState<{
+    term: string;
+    translation: string;
+    definition: string;
+    sourceQuestionId?: string;
+  } | null>(null);
+  const [wordHint, setWordHint] = useState('');
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
   const { questions, currentIndex, answers, setSession, setAnswer, setCurrentIndex, next, prev, reset } = usePracticeStore();
 
@@ -114,6 +123,52 @@ export default function ChapterPracticePage() {
     await startPractice();
   };
 
+  const openWordCard = (term: string, sourceQuestionId?: string) => {
+    const found = lookupDictionaryTerm(term);
+    if (found) {
+      setSelectedWord({ ...found, sourceQuestionId });
+      return;
+    }
+    setSelectedWord({
+      term,
+      translation: '（暫無內建翻譯）',
+      definition: '可先加入字庫，後續再補充解釋。',
+      sourceQuestionId
+    });
+  };
+
+  const saveWord = () => {
+    if (!selectedWord) return;
+    addVocabularyEntry(selectedWord);
+    setWordHint(`已加入字庫：${selectedWord.term}`);
+  };
+
+  const renderInteractiveText = (text: string, sourceQuestionId?: string) => {
+    const lines = text.split('\n');
+    return lines.map((line, lineIdx) => {
+      const tokens = line.split(/(\b[A-Za-z][A-Za-z'-]*\b)/g);
+      return (
+        <span key={`${sourceQuestionId ?? 'line'}-${lineIdx}`} className="block">
+          {tokens.map((token, tokenIdx) => {
+            if (!/^[A-Za-z][A-Za-z'-]*$/.test(token)) {
+              return <span key={`${lineIdx}-${tokenIdx}`}>{token}</span>;
+            }
+            return (
+              <button
+                type="button"
+                key={`${lineIdx}-${tokenIdx}`}
+                className="rounded px-0.5 underline decoration-dotted underline-offset-4 hover:bg-amber-100"
+                onClick={() => openWordCard(token, sourceQuestionId)}
+              >
+                {token}
+              </button>
+            );
+          })}
+        </span>
+      );
+    });
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Chapter Practice</h1>
@@ -145,7 +200,19 @@ export default function ChapterPracticePage() {
       {current && !submitted ? (
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
-          <h2 className="mb-4 whitespace-pre-line text-lg font-semibold leading-8">{current.stem}</h2>
+          <h2 className="mb-4 text-lg font-semibold leading-8">{renderInteractiveText(current.stem, current.id)}</h2>
+          {selectedWord && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+              <p className="font-semibold">
+                {selectedWord.term} → {selectedWord.translation}
+              </p>
+              <p className="mt-1 text-slate-700">{selectedWord.definition}</p>
+              <button type="button" className="mt-2 rounded border border-amber-400 bg-white px-2 py-1 text-xs" onClick={saveWord}>
+                加入單字庫
+              </button>
+              {wordHint && <p className="mt-1 text-xs text-emerald-700">{wordHint}</p>}
+            </div>
+          )}
           <div className="space-y-2">
             {current.options.map((opt) => (
               <label
@@ -156,7 +223,7 @@ export default function ChapterPracticePage() {
               >
                 <input type="radio" className="mr-2" name={current.id} checked={answers[current.id] === opt.key} onChange={() => setAnswer(current.id, opt.key)} />
                 <span className="font-medium">{opt.key}.</span>{' '}
-                <span className="whitespace-pre-line leading-7">{opt.text}</span>
+                <span className="leading-7">{renderInteractiveText(opt.text, current.id)}</span>
               </label>
             ))}
           </div>
