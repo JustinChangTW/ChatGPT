@@ -361,6 +361,48 @@ Admin 已提供：
 
 ## AI 解題助教設計（答題回饋＋關鍵字更新＋弱英文輔助）
 
+### Gen AI 使用與設定說明（實作版）
+
+目前程式中的 AI 助教回覆屬於**示範 mock**（可在 `app/wrong-notebook/page.tsx` 看到假回覆邏輯），尚未直接串接外部 LLM。正式接線建議採「前端呼叫 Next.js API Route、API Route 再呼叫模型供應商」。
+
+#### 1) 建議環境變數
+在 `.env.local`（本機）或 GitHub Actions Secrets（部署）新增：
+
+```bash
+# 使用哪個供應商（例：openai / azure-openai / gemini）
+GEN_AI_PROVIDER=openai
+
+# 模型名稱（例：gpt-4.1-mini / gpt-4.1 / gpt-5-mini）
+GEN_AI_MODEL=gpt-4.1-mini
+
+# API 金鑰（務必只放在伺服器端，不可用 NEXT_PUBLIC_ 前綴）
+GEN_AI_API_KEY=your_server_side_key
+
+# 可選：API Base URL（自建 gateway 或相容端點時使用）
+GEN_AI_BASE_URL=
+```
+
+> 注意：`GEN_AI_API_KEY` 不可使用 `NEXT_PUBLIC_` 前綴，否則會被打包到前端。
+
+#### 2) 呼叫路徑建議
+1. 前端頁面（如錯題本）送出問題到 `/api/ai/explain-question`。  
+2. API Route 讀取 `GEN_AI_*` 設定後呼叫 LLM。  
+3. 回傳結構化 JSON（例如：`explanation/keyPoints/keywords/englishTerms`）。  
+4. 前端渲染回覆，並視需求寫入 `weakVocabulary` / `questionInsights`。
+
+#### 3) 部署設定（GitHub）
+到 `Repo Settings -> Secrets and variables -> Actions`：
+- Secrets：`GEN_AI_API_KEY`
+- Variables（可選）：`GEN_AI_PROVIDER`、`GEN_AI_MODEL`、`GEN_AI_BASE_URL`
+
+若在 GitHub Actions build 或 server runtime 需要讀取，請確認 workflow 或部署平台有把這些變數注入執行環境。
+
+#### 4) 安全與成本建議（務必）
+- 只在伺服器端呼叫模型 API，不要前端直連。
+- API Route 加上 rate limit（例如每帳號每分鐘請求上限）。
+- 啟用快取（同題同問句可短時間重用回答）。
+- 記錄 token 使用量與錯誤率，避免成本失控。
+
 ### 目標
 1. 使用者在每題可直接「問 AI」  
 2. AI 回覆時可結合：題目、正確答案、錯誤原因、章節與領域  

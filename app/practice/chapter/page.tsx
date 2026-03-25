@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePracticeStore } from '@/lib/store/use-practice-store';
 import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
@@ -32,6 +32,7 @@ export default function ChapterPracticePage() {
     sourceQuestionId?: string;
   } | null>(null);
   const [wordHint, setWordHint] = useState('');
+  const questionPanelRef = useRef<HTMLDivElement | null>(null);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
   const { questions, currentIndex, answers, setSession, setAnswer, setCurrentIndex, next, prev, reset } = usePracticeStore();
 
@@ -124,13 +125,15 @@ export default function ChapterPracticePage() {
   };
 
   const openWordCard = (term: string, sourceQuestionId?: string) => {
-    const found = lookupDictionaryTerm(term);
+    const cleanTerm = term.trim();
+    if (!cleanTerm) return;
+    const found = lookupDictionaryTerm(cleanTerm);
     if (found) {
       setSelectedWord({ ...found, sourceQuestionId });
       return;
     }
     setSelectedWord({
-      term,
+      term: cleanTerm,
       translation: '（暫無內建翻譯）',
       definition: '可先加入字庫，後續再補充解釋。',
       sourceQuestionId
@@ -143,30 +146,15 @@ export default function ChapterPracticePage() {
     setWordHint(`已加入字庫：${selectedWord.term}`);
   };
 
-  const renderInteractiveText = (text: string, sourceQuestionId?: string) => {
-    const lines = text.split('\n');
-    return lines.map((line, lineIdx) => {
-      const tokens = line.split(/(\b[A-Za-z][A-Za-z'-]*\b)/g);
-      return (
-        <span key={`${sourceQuestionId ?? 'line'}-${lineIdx}`} className="block">
-          {tokens.map((token, tokenIdx) => {
-            if (!/^[A-Za-z][A-Za-z'-]*$/.test(token)) {
-              return <span key={`${lineIdx}-${tokenIdx}`}>{token}</span>;
-            }
-            return (
-              <button
-                type="button"
-                key={`${lineIdx}-${tokenIdx}`}
-                className="rounded px-0.5 underline decoration-dotted underline-offset-4 hover:bg-amber-100"
-                onClick={() => openWordCard(token, sourceQuestionId)}
-              >
-                {token}
-              </button>
-            );
-          })}
-        </span>
-      );
-    });
+  const translateSelectedText = (sourceQuestionId?: string) => {
+    const selected = window.getSelection()?.toString().trim() ?? '';
+    const normalized = selected.replace(/\s+/g, ' ');
+    if (!normalized) {
+      setWordHint('請先反白想查的英文單字或片語。');
+      return;
+    }
+    openWordCard(normalized, sourceQuestionId);
+    setWordHint('');
   };
 
   return (
@@ -198,9 +186,17 @@ export default function ChapterPracticePage() {
       </div>
 
       {current && !submitted ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div ref={questionPanelRef} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
-          <h2 className="mb-4 text-lg font-semibold leading-8">{renderInteractiveText(current.stem, current.id)}</h2>
+          <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{current.stem}</h2>
+          <p className="mb-3 text-xs text-slate-500">可直接反白英文單字/片語後，點「翻譯選取文字」。</p>
+          <button
+            type="button"
+            className="mb-4 rounded border border-slate-300 bg-white px-2 py-1 text-xs hover:bg-slate-50"
+            onClick={() => translateSelectedText(current.id)}
+          >
+            翻譯選取文字
+          </button>
           {selectedWord && (
             <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
               <p className="font-semibold">
@@ -223,7 +219,7 @@ export default function ChapterPracticePage() {
               >
                 <input type="radio" className="mr-2" name={current.id} checked={answers[current.id] === opt.key} onChange={() => setAnswer(current.id, opt.key)} />
                 <span className="font-medium">{opt.key}.</span>{' '}
-                <span className="leading-7">{renderInteractiveText(opt.text, current.id)}</span>
+                <span className="whitespace-pre-line leading-7">{opt.text}</span>
               </label>
             ))}
           </div>
