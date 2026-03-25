@@ -1,9 +1,12 @@
 const PROGRESS_KEYS = [
-  'cct_practice_history_v1',
-  'cct_exam_history_v1',
+  'cct_practice_attempts_v1',
+  'cct_chapter_progress_v1',
   'cct_wrong_notebook_v1',
   'cct_learning_progress_v1',
-  'cct_dashboard_stats_v1'
+  'cct_dashboard_stats_v1',
+  // backward-compatible legacy keys
+  'cct_practice_history_v1',
+  'cct_exam_history_v1'
 ] as const;
 
 function isBrowser(): boolean {
@@ -23,4 +26,3 @@ export function resetLearningProgress(): { removed: string[] } {
 
   return { removed };
 }
-

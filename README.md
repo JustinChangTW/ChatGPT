@@ -359,6 +359,70 @@ Admin 已提供：
 - Firestore Security Rules：https://firebase.google.com/docs/firestore/security/get-started
 - Firebase Console：https://console.firebase.google.com/
 
+## AI 解題助教設計（答題回饋＋關鍵字更新＋弱英文輔助）
+
+### 目標
+1. 使用者在每題可直接「問 AI」  
+2. AI 回覆時可結合：題目、正確答案、錯誤原因、章節與領域  
+3. 回覆後自動更新「解題關鍵字」與「英文弱點字彙」資料，供後續練習推薦
+
+### 建議系統架構
+- **前端（Next.js）**
+  - 題目頁增加「AI 助教」按鈕與對話區
+  - 呼叫後端 API（不要在前端直接放 LLM key）
+- **後端 API（Serverless）**
+  - `/api/ai/explain-question`
+  - `/api/ai/ask-followup`
+  - `/api/ai/update-keywords`
+- **資料層（Firestore）**
+  - `aiConversations/{sessionId}`：存對話歷程
+  - `questionInsights/{questionId}`：題目共用關鍵字、常見錯因
+  - `userProfiles/{userId}/weakVocabulary/{word}`：個人弱英文字彙與熟悉度
+  - `userProfiles/{userId}/weakConcepts/{concept}`：個人弱觀念標籤
+
+### 建議 Prompt 流程
+1. **解題說明 Prompt**
+   - 輸入：題目、選項、正解、使用者作答、章節、領域、語言偏好
+   - 輸出（JSON）：`explanation`, `keyPoints[]`, `keywords[]`, `englishTerms[]`, `nextQuestionSuggestion`
+2. **英文弱點分析 Prompt**
+   - 專注抽取：
+     - 看不懂的關鍵詞（例如 protocol / exploit / lateral movement）
+     - 詞彙難度（easy/medium/hard）
+     - 中文對照、例句
+
+### 關鍵字更新策略（避免污染）
+- 僅當以下條件滿足才寫入：
+  - 使用者該題答錯，或主動詢問
+  - AI 回傳信心分數 >= 門檻（例如 0.7）
+- 更新採「加權計分」：
+  - `keywordScore = keywordScore + errorWeight + recencyWeight`
+- 定期衰減：
+  - 長時間未出現的關鍵字分數遞減，避免舊噪音
+
+### 弱英文使用者體驗（建議）
+- 一鍵切換：
+  - `精簡中文解釋`
+  - `中英對照`
+  - `只看關鍵詞卡`
+- 每題提供：
+  - 3~5 個核心英文詞（中文義、同義詞、例句）
+  - 這題為何與該詞有關（情境式解釋）
+- 練習模式新增：
+  - 「弱英文強化」小測驗（只針對高分弱詞）
+
+### 安全與成本
+- 伺服器端控流：
+  - 每人每分鐘請求上限（rate limit）
+  - 快取重複問題回覆（降低成本）
+- 內容安全：
+  - 輸入做敏感詞過濾
+  - 回覆加上「非醫療/法律建議」等固定聲明（視需求）
+
+### 最小可行版本（MVP）建議順序
+1. 先做「每題問 AI 解釋」
+2. 再做「AI 回覆後寫入 keywords / weakVocabulary」
+3. 最後做「依弱點推薦下一題」與「弱英文專屬練習」
+
 ## Merge 前自動檢查（建議必開）
 - Workflow: `.github/workflows/pr-check.yml`
 - 觸發時機：PR 到 `main`

@@ -8,6 +8,7 @@ import { assembleOfficialExam } from '@/lib/services/exam-assembly';
 import { buildPracticeAttempt } from '@/lib/services/practice-attempt-service';
 import { deletePracticeAttempt, loadPracticeAttempts, savePracticeAttempt } from '@/lib/services/practice-attempt-storage';
 import { rebuildWrongNotebookFromAttempts } from '@/lib/services/wrong-notebook-storage';
+import { clearExamSessionDraft, loadExamSessionDraft, saveExamSessionDraft } from '@/lib/services/exam-session-storage';
 
 type ExamSession = {
   id: string;
@@ -30,7 +31,19 @@ export default function ExamPage() {
   useEffect(() => {
     setBank(loadQuestionBank());
     setHistory(loadPracticeAttempts().filter((a) => a.mode === 'exam'));
+    const draft = loadExamSessionDraft();
+    if (draft && !draft.submitted) {
+      setSession(draft);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!session || session.submitted) {
+      clearExamSessionDraft();
+      return;
+    }
+    saveExamSessionDraft(session);
+  }, [session]);
 
   const answeredCount = useMemo(() => {
     if (!session) return 0;
@@ -85,6 +98,7 @@ export default function ExamPage() {
     savePracticeAttempt(attempt);
     rebuildWrongNotebookFromAttempts(loadPracticeAttempts(), 'local-user');
     setSession((s) => (s ? { ...s, submitted: true } : s));
+    clearExamSessionDraft();
     setHistory(loadPracticeAttempts().filter((a) => a.mode === 'exam'));
   };
 
@@ -115,14 +129,19 @@ export default function ExamPage() {
       <button className="w-full rounded bg-blue-600 px-4 py-3 text-white sm:w-auto" onClick={generateNewPaper}>產生新試券（60題）</button>
 
       {session ? (
-        <div className="rounded-lg border bg-white p-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-sm text-slate-500">試券編號：{session.id} · 第 {session.currentIndex + 1}/{session.questions.length} 題 · 已作答 {answeredCount}/{session.questions.length}</p>
           {current ? (
             <div className="mt-2">
               <p className="font-semibold whitespace-pre-line leading-8">{current.stem}</p>
               <div className="mt-2 space-y-1">
                 {current.options.map((o) => (
-                  <label key={o.key} className="block rounded border p-2">
+                  <label
+                    key={o.key}
+                    className={`block rounded-lg border p-2 transition ${
+                      session.answers[current.id] === o.key ? 'border-blue-500 bg-blue-50' : 'hover:border-blue-400 hover:bg-blue-50'
+                    }`}
+                  >
                     <input
                       type="radio"
                       className="mr-2"
@@ -159,7 +178,7 @@ export default function ExamPage() {
           </div>
           <div className="mt-4 border-t pt-3">
             <p className="mb-2 text-sm text-slate-600">題號導覽（已作答會變色）</p>
-            <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+            <div className="grid grid-cols-6 gap-1 sm:grid-cols-10 lg:grid-cols-12">
               {session.questions.map((q, idx) => {
                 const answered = session.answers[q.id] !== undefined;
                 const active = session.currentIndex === idx;
@@ -168,7 +187,7 @@ export default function ExamPage() {
                     key={q.id}
                     type="button"
                     onClick={() => goToQuestion(idx)}
-                    className={`rounded border px-2 py-2 text-sm ${
+                    className={`h-8 rounded border text-xs ${
                       active
                         ? 'border-blue-600 bg-blue-600 text-white'
                         : answered

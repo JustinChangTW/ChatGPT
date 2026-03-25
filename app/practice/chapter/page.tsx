@@ -24,7 +24,7 @@ export default function ChapterPracticePage() {
 
   const [selectedChapter, setSelectedChapter] = useState(fallbackChapters[0]);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
-  const { questions, currentIndex, answers, setSession, setAnswer, next, prev, reset } = usePracticeStore();
+  const { questions, currentIndex, answers, setSession, setAnswer, setCurrentIndex, next, prev, reset } = usePracticeStore();
 
   useEffect(() => {
     const loaded = loadQuestionBank();
@@ -143,12 +143,17 @@ export default function ChapterPracticePage() {
       </div>
 
       {current && !submitted ? (
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
           <h2 className="mb-4 whitespace-pre-line text-lg font-semibold leading-8">{current.stem}</h2>
           <div className="space-y-2">
             {current.options.map((opt) => (
-              <label className="block rounded-lg border p-3 transition hover:border-blue-400 hover:bg-blue-50" key={opt.key}>
+              <label
+                className={`block rounded-lg border p-3 transition ${
+                  answers[current.id] === opt.key ? 'border-blue-500 bg-blue-50' : 'hover:border-blue-400 hover:bg-blue-50'
+                }`}
+                key={opt.key}
+              >
                 <input type="radio" className="mr-2" name={current.id} checked={answers[current.id] === opt.key} onChange={() => setAnswer(current.id, opt.key)} />
                 <span className="font-medium">{opt.key}.</span>{' '}
                 <span className="whitespace-pre-line leading-7">{opt.text}</span>
@@ -160,6 +165,31 @@ export default function ChapterPracticePage() {
             <button className="rounded border px-3 py-2" onClick={next}>下一題</button>
             <button className="rounded bg-emerald-600 px-3 py-2 text-white" onClick={submitPractice}>交卷看結果</button>
             <p className="self-center text-sm text-slate-500 sm:ml-1">已作答 {answeredCount}/{questions.length}</p>
+          </div>
+          <div className="mt-4 border-t pt-3">
+            <p className="mb-2 text-sm text-slate-600">題號導覽</p>
+            <div className="grid grid-cols-5 gap-1 sm:grid-cols-10">
+              {questions.map((q, idx) => {
+                const answered = answers[q.id] !== undefined && answers[q.id] !== '';
+                const active = idx === currentIndex;
+                return (
+                  <button
+                    type="button"
+                    key={q.id}
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`h-8 rounded border text-xs ${
+                      active
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : answered
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-300 bg-white text-slate-700'
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       ) : null}
