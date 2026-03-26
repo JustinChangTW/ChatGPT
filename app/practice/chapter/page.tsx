@@ -11,7 +11,8 @@ import { recordWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 import { buildPracticeAttempt } from '@/lib/services/practice-attempt-service';
 import { savePracticeAttempt } from '@/lib/services/practice-attempt-storage';
 import { getBuiltinDictionaryTerms, lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
-import { addVocabularyEntry } from '@/lib/services/vocabulary-storage';
+import { addVocabularyEntry, findVocabularyEntry } from '@/lib/services/vocabulary-storage';
+import { fetchRealtimeTranslation } from '@/lib/services/realtime-translation';
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
 
@@ -32,6 +33,7 @@ export default function ChapterPracticePage() {
     sourceQuestionId?: string;
   } | null>(null);
   const [wordHint, setWordHint] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
   const questionPanelRef = useRef<HTMLDivElement | null>(null);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
   const { questions, currentIndex, answers, setSession, setAnswer, setCurrentIndex, next, prev, reset } = usePracticeStore();
@@ -141,18 +143,30 @@ export default function ChapterPracticePage() {
     await startPractice();
   };
 
-  const openWordCard = (term: string, sourceQuestionId?: string) => {
+  const openWordCard = async (term: string, sourceQuestionId?: string) => {
     const cleanTerm = term.trim();
     if (!cleanTerm) return;
+    const vocabHit = findVocabularyEntry(cleanTerm);
+    if (vocabHit) {
+      setSelectedWord({ ...vocabHit, sourceQuestionId });
+      return;
+    }
     const found = lookupDictionaryTerm(cleanTerm);
     if (found) {
       setSelectedWord({ ...found, sourceQuestionId });
       return;
     }
+    setIsTranslating(true);
+    const realtime = await fetchRealtimeTranslation(cleanTerm);
+    setIsTranslating(false);
+    if (realtime) {
+      setSelectedWord({ ...realtime, sourceQuestionId });
+      return;
+    }
     setSelectedWord({
       term: cleanTerm,
       translation: '（暫無內建翻譯）',
-      definition: '可先加入字庫，後續再補充解釋。',
+      definition: '可先加入字庫，後續再補充解釋。若要即時翻譯，請確認網路可連線。',
       sourceQuestionId
     });
   };
@@ -170,7 +184,7 @@ export default function ChapterPracticePage() {
       setWordHint('請先反白想查的英文單字或片語。');
       return;
     }
-    openWordCard(normalized, sourceQuestionId);
+    void openWordCard(normalized, sourceQuestionId);
     setWordHint('');
   };
 
@@ -234,7 +248,7 @@ export default function ChapterPracticePage() {
                     type="button"
                     className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100"
                     onClick={() => {
-                      openWordCard(entry.term, current.id);
+                      void openWordCard(entry.term, current.id);
                       setWordHint('');
                     }}
                   >
@@ -251,6 +265,7 @@ export default function ChapterPracticePage() {
           >
             翻譯選取文字
           </button>
+          {isTranslating && <p className="mb-3 text-xs text-slate-500">翻譯中…</p>}
           {selectedWord && (
             <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
               <p className="font-semibold">

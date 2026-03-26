@@ -470,3 +470,16 @@ GEN_AI_BASE_URL=
 - 觸發時機：PR 到 `main`
 - 檢查項目：`typecheck`、`lint`、`test`、`build`
 - 建議在 GitHub Repo Settings → Branch protection rules 將 `PR Quality Gate / Build / Test / Typecheck / Lint` 設為 Required status check，未通過不可合併。
+
+## 即時英文→中文翻譯（單字卡）如何啟用
+
+目前章節練習的翻譯流程是：
+1. 先查「個人單字庫」（已學過的字直接命中）
+2. 再查內建字典（離線可用）
+3. 若找不到，再走即時翻譯（`lib/services/realtime-translation.ts`，使用 MyMemory API）
+
+你可以在題目頁反白單字/片語後，按「翻譯選取文字」：
+- 有網路時：可拿到即時中文翻譯
+- 無網路時：會退回「暫無內建翻譯」提示
+
+> 若要替換成你自己的翻譯服務（例如企業內部 API / OpenAI / Azure OpenAI），可把 `fetchRealtimeTranslation()` 改成呼叫你的 API endpoint，前端呼叫流程不需要改。
