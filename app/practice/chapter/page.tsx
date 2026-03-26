@@ -65,18 +65,21 @@ export default function ChapterPracticePage() {
     return { detail, correctCount, score };
   }, [questions, answers]);
 
-  const suggestedTerms = useMemo(() => {
+  const suggestedEntries = useMemo(() => {
     if (!current) return [];
     const dictionaryTerms = new Set(getBuiltinDictionaryTerms());
     const text = [current.stem, ...current.options.map((x) => x.text)].join(' ');
     const tokens = text.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
-    return Array.from(
+    const terms = Array.from(
       new Set(
         tokens
           .map((token) => token.toLowerCase())
           .filter((token) => dictionaryTerms.has(token))
       )
     );
+    return terms
+      .map((term) => lookupDictionaryTerm(term))
+      .filter((entry): entry is NonNullable<typeof entry> => !!entry);
   }, [current]);
 
   const startPractice = async () => {
@@ -171,6 +174,14 @@ export default function ChapterPracticePage() {
     setWordHint('');
   };
 
+  const addAllSuggestedTerms = () => {
+    if (!current || suggestedEntries.length === 0) return;
+    suggestedEntries.forEach((entry) => {
+      addVocabularyEntry({ ...entry, sourceQuestionId: current.id });
+    });
+    setWordHint(`已加入 ${suggestedEntries.length} 個建議關鍵字到字庫`);
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Chapter Practice</h1>
@@ -204,21 +215,30 @@ export default function ChapterPracticePage() {
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
           <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{current.stem}</h2>
           <p className="mb-3 text-xs text-slate-500">可直接反白英文單字/片語後，點「翻譯選取文字」。</p>
-          {suggestedTerms.length > 0 && (
+          {suggestedEntries.length > 0 && (
             <div className="mb-3">
-              <p className="mb-1 text-xs text-slate-500">建議關鍵字：</p>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">建議關鍵字：</p>
+                <button
+                  type="button"
+                  className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100"
+                  onClick={addAllSuggestedTerms}
+                >
+                  全部加入字庫
+                </button>
+              </div>
               <div className="flex flex-wrap gap-1">
-                {suggestedTerms.map((term) => (
+                {suggestedEntries.map((entry) => (
                   <button
-                    key={term}
+                    key={entry.term}
                     type="button"
                     className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100"
                     onClick={() => {
-                      openWordCard(term, current.id);
+                      openWordCard(entry.term, current.id);
                       setWordHint('');
                     }}
                   >
-                    {term}
+                    {entry.term} · {entry.translation}
                   </button>
                 ))}
               </div>
