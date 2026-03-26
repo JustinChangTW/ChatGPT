@@ -19,6 +19,10 @@ const BUILTIN_DICTIONARY: Record<string, DictionaryEntry> = {
   vulnerability: { term: 'vulnerability', translation: '弱點', definition: '系統可被攻擊者利用的缺陷。' }
 };
 
+export function getBuiltinDictionaryTerms(): string[] {
+  return Object.keys(BUILTIN_DICTIONARY);
+}
+
 export function lookupDictionaryTerm(term: string): DictionaryEntry | null {
   const normalized = term.trim().toLowerCase();
   if (!normalized) return null;

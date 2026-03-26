@@ -10,7 +10,7 @@ import { loadChapterProgress, updateChapterProgress } from '@/lib/services/chapt
 import { recordWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 import { buildPracticeAttempt } from '@/lib/services/practice-attempt-service';
 import { savePracticeAttempt } from '@/lib/services/practice-attempt-storage';
-import { lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
+import { getBuiltinDictionaryTerms, lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
 import { addVocabularyEntry } from '@/lib/services/vocabulary-storage';
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
@@ -64,6 +64,20 @@ export default function ChapterPracticePage() {
     const score = Math.round((correctCount / questions.length) * 100);
     return { detail, correctCount, score };
   }, [questions, answers]);
+
+  const suggestedTerms = useMemo(() => {
+    if (!current) return [];
+    const dictionaryTerms = new Set(getBuiltinDictionaryTerms());
+    const text = [current.stem, ...current.options.map((x) => x.text)].join(' ');
+    const tokens = text.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
+    return Array.from(
+      new Set(
+        tokens
+          .map((token) => token.toLowerCase())
+          .filter((token) => dictionaryTerms.has(token))
+      )
+    );
+  }, [current]);
 
   const startPractice = async () => {
     const qs = await assembleChapterPractice(bank, selectedChapter);
@@ -190,6 +204,26 @@ export default function ChapterPracticePage() {
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
           <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{current.stem}</h2>
           <p className="mb-3 text-xs text-slate-500">可直接反白英文單字/片語後，點「翻譯選取文字」。</p>
+          {suggestedTerms.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1 text-xs text-slate-500">建議關鍵字：</p>
+              <div className="flex flex-wrap gap-1">
+                {suggestedTerms.map((term) => (
+                  <button
+                    key={term}
+                    type="button"
+                    className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100"
+                    onClick={() => {
+                      openWordCard(term, current.id);
+                      setWordHint('');
+                    }}
+                  >
+                    {term}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <button
             type="button"
             className="mb-4 rounded border border-slate-300 bg-white px-2 py-1 text-xs hover:bg-slate-50"
