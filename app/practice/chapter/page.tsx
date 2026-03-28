@@ -13,6 +13,7 @@ import { savePracticeAttempt } from '@/lib/services/practice-attempt-storage';
 import { DictionaryEntry, getBuiltinDictionaryTerms, lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
 import { addVocabularyEntry, findVocabularyEntry } from '@/lib/services/vocabulary-storage';
 import { fetchRealtimeTranslation } from '@/lib/services/realtime-translation';
+import { loadCustomKeywords, saveCustomKeywords } from '@/lib/services/custom-keyword-storage';
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
 
@@ -47,7 +48,12 @@ export default function ChapterPracticePage() {
     setBank(loaded);
     if (loaded[0]?.chapter) setSelectedChapter(loaded[0].chapter);
     setProgress(loadChapterProgress());
+    setCustomKeywordsByQuestion(loadCustomKeywords());
   }, []);
+
+  useEffect(() => {
+    saveCustomKeywords(customKeywordsByQuestion);
+  }, [customKeywordsByQuestion]);
 
   const current = questions[currentIndex];
   const answeredCount = useMemo(

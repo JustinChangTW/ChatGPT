@@ -442,7 +442,7 @@ export default function AdminPage() {
       logAction('firebase.pushAllData', res.ok ? 'success' : 'fail', res);
       setResult(
         res.ok
-          ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度）」同步到 Firebase。'
+          ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度/單字庫/關鍵字記錄/字典 API 設定）」同步到 Firebase。'
           : `全量同步失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`
       );
     } catch (err) {
@@ -451,24 +451,26 @@ export default function AdminPage() {
     }
   };
 
+  const allDataPulledSummary = (stats: NonNullable<Awaited<ReturnType<typeof hydrateAllLocalDataFromCloud>>['stats']>) =>
+    `已從 Firebase 拉取全部資料：題庫 ${stats.questionBank}、歷史 ${stats.practiceAttempts}、錯題本 ${stats.wrongNotebook}、章節進度 ${stats.chapterProgress}、單字庫 ${stats.vocabularyBank}、關鍵字記錄 ${stats.customKeywords}、字典 API 設定 ${stats.dictionaryProviders}。`;
+
   const pullAllCloud = async () => {
-    logAction('firebase.pullAllData', 'start');
-    setResult('全量拉取中…（最多約 15 秒，完成後會顯示成功或失敗）');
+    logAction('sync.pullAllData', 'start');
+    setResult('全量資料拉取中…（最多約 15 秒，完成後會顯示成功或失敗）');
     try {
-      const res = await runWithTimeout('firebase.pullAllData', hydrateAllLocalDataFromCloud());
+      const res = await runWithTimeout('sync.pullAllData', hydrateAllLocalDataFromCloud(), 15000);
       if (res.ok && res.stats) {
+        logAction('sync.pullAllData', 'success', res.stats);
         setBank(loadQuestionBank());
-        logAction('firebase.pullAllData', 'success', res.stats);
-        setResult(
-          `已從 Firebase 拉取全部資料：題庫 ${res.stats.questionBank}、歷史 ${res.stats.practiceAttempts}、錯題本 ${res.stats.wrongNotebook}、章節進度 ${res.stats.chapterProgress}。`
-        );
+        setResult(allDataPulledSummary(res.stats));
         return;
       }
-      logAction('firebase.pullAllData', 'fail', res);
+      logAction('sync.pullAllData', 'fail', { reason: res.reason, error: res.error });
       setResult(`全量拉取失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`);
     } catch (err) {
-      logAction('firebase.pullAllData', 'fail', { reason: err instanceof Error ? err.message : String(err) });
-      setResult(`全量拉取失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      logAction('sync.pullAllData', 'fail', { reason: msg });
+      setResult(`全量拉取失敗：${msg}`);
     }
   };
 
@@ -546,7 +548,7 @@ export default function AdminPage() {
             '全量從 Firebase 拉取',
             !!pullAll.ok,
             pullAll.ok && pullAll.stats
-              ? `成功（題庫${pullAll.stats.questionBank}/歷史${pullAll.stats.practiceAttempts}/錯題本${pullAll.stats.wrongNotebook}/章節${pullAll.stats.chapterProgress}）`
+              ? `成功（題庫${pullAll.stats.questionBank}/歷史${pullAll.stats.practiceAttempts}/錯題本${pullAll.stats.wrongNotebook}/章節${pullAll.stats.chapterProgress}/單字${pullAll.stats.vocabularyBank}/關鍵字${pullAll.stats.customKeywords}/字典API${pullAll.stats.dictionaryProviders}）`
               : `${pullAll.reason}${pullAll.error ? ` | ${pullAll.error}` : ''}`
           );
         }
