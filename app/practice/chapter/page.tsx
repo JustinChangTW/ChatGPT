@@ -37,7 +37,6 @@ export default function ChapterPracticePage() {
   const [wordHint, setWordHint] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [inlineKeywordMode, setInlineKeywordMode] = useState(false);
-  const [manualKeywordInput, setManualKeywordInput] = useState('');
   const [customKeywordsByQuestion, setCustomKeywordsByQuestion] = useState<Record<string, DictionaryEntry[]>>({});
   const questionPanelRef = useRef<HTMLDivElement | null>(null);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
@@ -182,14 +181,29 @@ export default function ChapterPracticePage() {
     setWordHint(`已加入字庫：${selectedWord.term}`);
   };
 
-  const translateSelectedText = (sourceQuestionId?: string) => {
+  const translateSelectedText = async (sourceQuestionId?: string, addAsKeyword = false) => {
     const selected = window.getSelection()?.toString().trim() ?? '';
     const normalized = selected.replace(/\s+/g, ' ');
     if (!normalized) {
       setWordHint('請先反白想查的英文單字或片語。');
       return;
     }
-    void openWordCard(normalized, sourceQuestionId);
+    await openWordCard(normalized, sourceQuestionId);
+    if (addAsKeyword && sourceQuestionId) {
+      const found = lookupDictionaryTerm(normalized) ?? (await fetchRealtimeTranslation(normalized));
+      const entry: DictionaryEntry =
+        found ?? { term: normalized, translation: '（暫無翻譯）', definition: '可先加入字庫，後續補充。' };
+      setCustomKeywordsByQuestion((prev) => {
+        const exists = (prev[sourceQuestionId] ?? []).some((x) => x.term.toLowerCase() === normalized.toLowerCase());
+        if (exists) return prev;
+        return {
+          ...prev,
+          [sourceQuestionId]: [...(prev[sourceQuestionId] ?? []), entry]
+        };
+      });
+      setWordHint(`已翻譯並加入關鍵字：${normalized}`);
+      return;
+    }
     setWordHint('');
   };
 
@@ -208,26 +222,6 @@ export default function ChapterPracticePage() {
     [...suggestedEntries, ...custom].forEach((entry) => map.set(entry.term.toLowerCase(), entry));
     return Array.from(map.values());
   }, [current, customKeywordsByQuestion, suggestedEntries]);
-
-  const addManualKeyword = async () => {
-    if (!current) return;
-    const term = manualKeywordInput.trim();
-    if (!term) return;
-    const existing = activeKeywordEntries.find((x) => x.term.toLowerCase() === term.toLowerCase());
-    if (existing) {
-      setWordHint(`關鍵字已存在：${term}`);
-      return;
-    }
-    const found = lookupDictionaryTerm(term) ?? (await fetchRealtimeTranslation(term));
-    const entry: DictionaryEntry =
-      found ?? { term, translation: '（暫無翻譯）', definition: '可先加入字庫，後續補充。' };
-    setCustomKeywordsByQuestion((prev) => ({
-      ...prev,
-      [current.id]: [...(prev[current.id] ?? []), entry]
-    }));
-    setManualKeywordInput('');
-    setWordHint(`已新增關鍵字：${entry.term}`);
-  };
 
   const speakTerm = (term: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -338,14 +332,12 @@ export default function ChapterPracticePage() {
                 ))}
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <input
-                  className="rounded border px-2 py-1 text-xs"
-                  value={manualKeywordInput}
-                  onChange={(e) => setManualKeywordInput(e.target.value)}
-                  placeholder="新增英文關鍵字（例如 signature）"
-                />
-                <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => void addManualKeyword()}>
-                  加入關鍵字
+                <button
+                  type="button"
+                  className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
+                  onClick={() => void translateSelectedText(current.id, true)}
+                >
+                  翻譯選取文字並加入關鍵字
                 </button>
               </div>
             </div>
@@ -353,7 +345,7 @@ export default function ChapterPracticePage() {
           <button
             type="button"
             className="mb-4 rounded border border-slate-300 bg-white px-2 py-1 text-xs hover:bg-slate-50"
-            onClick={() => translateSelectedText(current.id)}
+            onClick={() => void translateSelectedText(current.id)}
           >
             翻譯選取文字
           </button>
