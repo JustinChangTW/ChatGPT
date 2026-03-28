@@ -12,24 +12,38 @@ import { loadCustomKeywords, saveCustomKeywords } from '@/lib/services/custom-ke
 const SHARED_DOC = { collection: 'publicData', id: 'cctShared' } as const;
 type SyncFailReason = 'firebase-not-configured' | 'unknown';
 
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, stripUndefined(v)]);
+    return Object.fromEntries(entries) as T;
+  }
+  return value;
+}
+
 export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?: SyncFailReason | 'cloud-write-failed'; error?: string }> {
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
 
   try {
+    const appData = stripUndefined({
+      questionBank: loadQuestionBank(),
+      practiceAttempts: loadPracticeAttempts(),
+      wrongNotebook: loadWrongNotebook(),
+      chapterProgress: loadChapterProgress(),
+      vocabularyBank: loadVocabularyBank(),
+      dictionaryProviders: loadDictionaryProviders(),
+      customKeywords: loadCustomKeywords(),
+      updatedAt: serverTimestamp(),
+      version: 1
+    });
     await setDoc(
       doc(db, SHARED_DOC.collection, SHARED_DOC.id),
       {
-        appData: {
-          questionBank: loadQuestionBank(),
-          practiceAttempts: loadPracticeAttempts(),
-          wrongNotebook: loadWrongNotebook(),
-          chapterProgress: loadChapterProgress(),
-          vocabularyBank: loadVocabularyBank(),
-          dictionaryProviders: loadDictionaryProviders(),
-          customKeywords: loadCustomKeywords(),
-          updatedAt: serverTimestamp(),
-          version: 1
-        }
+        appData
       },
       { merge: true }
     );
