@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   VocabularyEntry,
   clearVocabularyBank,
@@ -10,6 +10,12 @@ import {
   updateVocabularyEntry
 } from '@/lib/services/vocabulary-storage';
 import { fetchRealtimeTranslation } from '@/lib/services/realtime-translation';
+import {
+  DictionaryProviderConfig,
+  DictionaryProviderKind,
+  loadDictionaryProviders,
+  saveDictionaryProviders
+} from '@/lib/services/dictionary-provider-config';
 
 const PROFICIENCY_OPTIONS: Array<{ value: VocabularyEntry['proficiencyLevel']; label: string; hint: string }> = [
   { value: 'new', label: 'Lv0 新字', hint: '剛加入，幾乎不熟' },
@@ -19,7 +25,7 @@ const PROFICIENCY_OPTIONS: Array<{ value: VocabularyEntry['proficiencyLevel']; l
 ];
 
 export default function VocabularyPage() {
-  const [entries, setEntries] = useState<VocabularyEntry[]>(loadVocabularyBank());
+  const [entries, setEntries] = useState<VocabularyEntry[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -28,6 +34,46 @@ export default function VocabularyPage() {
   const [editDefinition, setEditDefinition] = useState('');
   const [hydratingIds, setHydratingIds] = useState<string[]>([]);
   const [actionHint, setActionHint] = useState('');
+  const [providers, setProviders] = useState<DictionaryProviderConfig[]>([]);
+
+  useEffect(() => {
+    setEntries(loadVocabularyBank());
+    setProviders(loadDictionaryProviders());
+  }, []);
+
+  const updateProvider = (id: string, patch: Partial<DictionaryProviderConfig>) => {
+    setProviders((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  };
+
+  const moveProvider = (id: string, direction: -1 | 1) => {
+    setProviders((prev) => {
+      const idx = prev.findIndex((p) => p.id === id);
+      if (idx < 0) return prev;
+      const nextIdx = idx + direction;
+      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[nextIdx]] = [next[nextIdx], next[idx]];
+      return next;
+    });
+  };
+
+  const addProvider = () => {
+    setProviders((prev) => [
+      ...prev,
+      {
+        id: `provider-custom-${Date.now()}`,
+        name: '自訂 API',
+        enabled: true,
+        kind: 'dictionaryapi_dev',
+        endpoint: 'https://api.dictionaryapi.dev/api/v2/entries/en/{word}'
+      }
+    ]);
+  };
+
+  const persistProviders = () => {
+    saveDictionaryProviders(providers);
+    setActionHint('已儲存字典 API 設定（依清單順序做主/備援）。');
+  };
 
   const reviewList = useMemo(
     () => [...entries].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
@@ -119,6 +165,13 @@ export default function VocabularyPage() {
     setActionHint(`已完成補齊，共處理 ${targets.length} 筆。`);
   };
 
+  const speakTerm = (term: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    const utter = new SpeechSynthesisUtterance(term);
+    utter.lang = 'en-US';
+    window.speechSynthesis.speak(utter);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -131,6 +184,60 @@ export default function VocabularyPage() {
         >
           清空單字庫
         </button>
+      </div>
+
+      <div className="rounded-xl border bg-white p-4">
+        <h2 className="mb-2 text-lg font-semibold">字典 API 設定（主 / 備援）</h2>
+        <p className="mb-2 text-xs text-slate-500">
+          系統會依下方順序逐一嘗試（第 1 個視為主 API，其餘為備援）。URL 請使用 <code>{'{word}'}</code> 當單字佔位符。
+        </p>
+        <div className="space-y-2">
+          {providers.map((provider, idx) => (
+            <div key={provider.id} className="rounded border p-2 text-xs">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="font-semibold">#{idx + 1}</span>
+                <input
+                  className="rounded border px-2 py-1"
+                  value={provider.name}
+                  onChange={(e) => updateProvider(provider.id, { name: e.target.value })}
+                />
+                <label className="flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={provider.enabled}
+                    onChange={(e) => updateProvider(provider.id, { enabled: e.target.checked })}
+                  />
+                  啟用
+                </label>
+                <select
+                  className="rounded border px-2 py-1"
+                  value={provider.kind}
+                  onChange={(e) => updateProvider(provider.id, { kind: e.target.value as DictionaryProviderKind })}
+                >
+                  <option value="dictionaryapi_dev">dictionaryapi.dev 格式</option>
+                  <option value="freedictionaryapi_com">FreeDictionaryAPI.com 格式</option>
+                </select>
+              </div>
+              <input
+                className="w-full rounded border px-2 py-1"
+                value={provider.endpoint}
+                onChange={(e) => updateProvider(provider.id, { endpoint: e.target.value })}
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" className="rounded border px-2 py-1" onClick={() => moveProvider(provider.id, -1)}>上移</button>
+                <button type="button" className="rounded border px-2 py-1" onClick={() => moveProvider(provider.id, 1)}>下移</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={addProvider}>
+            新增 API
+          </button>
+          <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={persistProviders}>
+            儲存 API 設定
+          </button>
+        </div>
       </div>
 
       <div className="rounded-xl border bg-white p-4">
@@ -156,6 +263,11 @@ export default function VocabularyPage() {
               <audio className="w-full max-w-xs" controls src={current.audioUrl}>
                 您的瀏覽器不支援 audio 播放。
               </audio>
+            )}
+            {!current.audioUrl && (
+              <button type="button" className="w-fit rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => speakTerm(current.term)}>
+                播放發音（瀏覽器語音）
+              </button>
             )}
             {revealed ? (
               <>
@@ -256,6 +368,15 @@ export default function VocabularyPage() {
                       <audio className="mt-1 w-full max-w-xs" controls src={entry.audioUrl}>
                         您的瀏覽器不支援 audio 播放。
                       </audio>
+                    )}
+                    {!entry.audioUrl && (
+                      <button
+                        type="button"
+                        className="mt-1 rounded border px-2 py-1 text-xs hover:bg-slate-50"
+                        onClick={() => speakTerm(entry.term)}
+                      >
+                        播放發音（瀏覽器語音）
+                      </button>
                     )}
                     <p className="mt-1 text-slate-600">{entry.definition}</p>
                     <div className="mt-2 flex flex-wrap gap-2">

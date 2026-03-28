@@ -28,7 +28,7 @@ export function loadVocabularyBank(): VocabularyEntry[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return (parsed as Array<Partial<VocabularyEntry>>).map((entry) => ({
-      id: entry.id ?? `vocab-${Date.now()}-${(entry.term ?? '').toLowerCase()}`,
+      id: entry.id ?? `vocab-${(entry.term ?? 'unknown').toLowerCase()}-${entry.createdAt ?? 'legacy'}`,
       term: entry.term ?? '',
       translation: entry.translation ?? '（尚未填寫）',
       definition: entry.definition ?? '（尚未填寫）',

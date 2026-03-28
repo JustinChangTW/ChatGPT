@@ -576,3 +576,10 @@ GEN_AI_API_KEY=sk-xxxx
 系統會呼叫即時查詢來源補上：
 - 中文翻譯（MyMemory）
 - 音標與發音（Free Dictionary API）
+
+注意：
+- Free Dictionary API 有些單字只提供音標、不提供 `audio` 連結，這時畫面會改用「瀏覽器語音（SpeechSynthesis）」播放作為備援。
+- 若看到音標但沒有音訊播放器，通常就是該字典條目沒有可用音檔（非系統錯誤）。
+- 可在「單字管理」頁的「字典 API 設定（主/備援）」調整 API 優先順序、啟用/停用，並新增同類型免費 API。
+  - 預設主 API：`https://api.dictionaryapi.dev/api/v2/entries/en/{word}`
+  - 預設備援 API：`https://freedictionaryapi.com/api/v1/entries/en/{word}`
