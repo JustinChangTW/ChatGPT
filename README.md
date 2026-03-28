@@ -583,3 +583,12 @@ GEN_AI_API_KEY=sk-xxxx
 - 可在「單字管理」頁的「字典 API 設定（主/備援）」調整 API 優先順序、啟用/停用，並新增同類型免費 API。
   - 預設主 API：`https://api.dictionaryapi.dev/api/v2/entries/en/{word}`
   - 預設備援 API：`https://freedictionaryapi.com/api/v1/entries/en/{word}`
+
+> 2026-03 更新：字典 API 設定已移至 **Admin 頁** 的「B. 字典 API 設定（主 / 備援）」區塊，方便集中管理。
+
+## 練習題關鍵字（含手動新增）
+
+在章節練習頁可：
+- 使用系統建議關鍵字（由題目自動偵測）
+- 手動輸入英文單字，按「加入關鍵字」加入本題關鍵字列表
+- 開啟「關鍵字中英混合顯示」把關鍵字中文混入原題，並可切回原文

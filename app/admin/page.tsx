@@ -21,6 +21,12 @@ import {
   loadFirebaseRuntimeConfig,
   saveFirebaseRuntimeConfig
 } from '@/lib/services/firebase-runtime-config';
+import {
+  DictionaryProviderConfig,
+  DictionaryProviderKind,
+  loadDictionaryProviders,
+  saveDictionaryProviders
+} from '@/lib/services/dictionary-provider-config';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -47,6 +53,7 @@ export default function AdminPage() {
   const [showFirebaseSettings, setShowFirebaseSettings] = useState(false);
   const [isQuickChecking, setIsQuickChecking] = useState(false);
   const [currentHostname, setCurrentHostname] = useState('');
+  const [dictionaryProviders, setDictionaryProviders] = useState<DictionaryProviderConfig[]>([]);
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
     apiKey: '',
     authDomain: '',
@@ -94,6 +101,7 @@ export default function AdminPage() {
     if (runtimeCfg) {
       setFirebaseForm(runtimeCfg);
     }
+    setDictionaryProviders(loadDictionaryProviders());
 
     if (!auth) {
       setUserLabel('Firebase 未設定');
@@ -252,6 +260,42 @@ export default function AdminPage() {
       logAction('import.submit', 'fail', { reason: 'json-parse-fail' });
       setResult('JSON 格式錯誤');
     }
+  };
+
+  const updateDictionaryProvider = (id: string, patch: Partial<DictionaryProviderConfig>) => {
+    setDictionaryProviders((prev) =>
+      prev.map((provider) => (provider.id === id ? { ...provider, ...patch } : provider))
+    );
+  };
+
+  const moveDictionaryProvider = (id: string, direction: -1 | 1) => {
+    setDictionaryProviders((prev) => {
+      const idx = prev.findIndex((p) => p.id === id);
+      if (idx < 0) return prev;
+      const nextIdx = idx + direction;
+      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[nextIdx]] = [next[nextIdx], next[idx]];
+      return next;
+    });
+  };
+
+  const addDictionaryProvider = () => {
+    setDictionaryProviders((prev) => [
+      ...prev,
+      {
+        id: `provider-custom-${Date.now()}`,
+        name: '自訂 API',
+        enabled: true,
+        kind: 'dictionaryapi_dev',
+        endpoint: 'https://api.dictionaryapi.dev/api/v2/entries/en/{word}'
+      }
+    ]);
+  };
+
+  const saveDictionaryProviderSettings = () => {
+    saveDictionaryProviders(dictionaryProviders);
+    setResult('已儲存字典 API 設定（主/備援順序）。');
   };
 
   const list = useMemo(
@@ -521,6 +565,8 @@ export default function AdminPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
+      <p className="text-sm text-slate-500">已依功能分區：A 同步與登入、B 字典 API 設定、C 題庫匯入管理。</p>
+      <h2 className="text-lg font-semibold">A. Firebase 同步與登入</h2>
       <div className="rounded border bg-white p-3 text-sm">
         <p>目前狀態：{firebaseStatusText}</p>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:flex-wrap">
@@ -654,6 +700,65 @@ export default function AdminPage() {
         )}
       </div>
 
+      <h2 className="text-lg font-semibold">B. 字典 API 設定（主 / 備援）</h2>
+      <div className="rounded border bg-white p-3 text-sm">
+        <p className="text-xs text-slate-500">
+          會依下方順序嘗試字典 API（第 1 個為主，其餘為備援）。可新增其它同類型 API。URL 請使用 <code>{'{word}'}</code>。
+        </p>
+        <div className="mt-2 space-y-2">
+          {dictionaryProviders.map((provider, idx) => (
+            <div key={provider.id} className="rounded border bg-slate-50 p-2 text-xs">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="font-semibold">#{idx + 1}</span>
+                <input
+                  className="rounded border px-2 py-1"
+                  value={provider.name}
+                  onChange={(e) => updateDictionaryProvider(provider.id, { name: e.target.value })}
+                />
+                <label className="flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={provider.enabled}
+                    onChange={(e) => updateDictionaryProvider(provider.id, { enabled: e.target.checked })}
+                  />
+                  啟用
+                </label>
+                <select
+                  className="rounded border px-2 py-1"
+                  value={provider.kind}
+                  onChange={(e) => updateDictionaryProvider(provider.id, { kind: e.target.value as DictionaryProviderKind })}
+                >
+                  <option value="dictionaryapi_dev">dictionaryapi.dev 格式</option>
+                  <option value="freedictionaryapi_com">FreeDictionaryAPI.com 格式</option>
+                </select>
+              </div>
+              <input
+                className="w-full rounded border px-2 py-1"
+                value={provider.endpoint}
+                onChange={(e) => updateDictionaryProvider(provider.id, { endpoint: e.target.value })}
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" className="rounded border px-2 py-1" onClick={() => moveDictionaryProvider(provider.id, -1)}>
+                  上移
+                </button>
+                <button type="button" className="rounded border px-2 py-1" onClick={() => moveDictionaryProvider(provider.id, 1)}>
+                  下移
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" className="rounded border px-3 py-2" onClick={addDictionaryProvider}>
+            新增 API
+          </button>
+          <button type="button" className="rounded bg-blue-600 px-3 py-2 text-white" onClick={saveDictionaryProviderSettings}>
+            儲存 API 設定
+          </button>
+        </div>
+      </div>
+
+      <h2 className="text-lg font-semibold">C. 題庫匯入與資料管理</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-2 rounded border bg-white p-4">
         <div
           className={`rounded border-2 border-dashed p-4 text-center text-sm ${

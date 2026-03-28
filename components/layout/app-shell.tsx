@@ -23,7 +23,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b bg-white">
-        <nav className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-3 py-3 text-sm sm:gap-4 sm:px-4">
+        <nav className="mx-auto hidden max-w-6xl flex-wrap gap-2 px-3 py-3 text-sm sm:flex sm:gap-3 sm:px-4">
           {navItems.map(([label, href]) => (
             <Link
               key={href}

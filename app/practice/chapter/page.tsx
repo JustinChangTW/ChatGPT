@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { usePracticeStore } from '@/lib/store/use-practice-store';
 import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
@@ -10,7 +10,7 @@ import { loadChapterProgress, updateChapterProgress } from '@/lib/services/chapt
 import { recordWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 import { buildPracticeAttempt } from '@/lib/services/practice-attempt-service';
 import { savePracticeAttempt } from '@/lib/services/practice-attempt-storage';
-import { getBuiltinDictionaryTerms, lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
+import { DictionaryEntry, getBuiltinDictionaryTerms, lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
 import { addVocabularyEntry, findVocabularyEntry } from '@/lib/services/vocabulary-storage';
 import { fetchRealtimeTranslation } from '@/lib/services/realtime-translation';
 
@@ -37,6 +37,8 @@ export default function ChapterPracticePage() {
   const [wordHint, setWordHint] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [inlineKeywordMode, setInlineKeywordMode] = useState(false);
+  const [manualKeywordInput, setManualKeywordInput] = useState('');
+  const [customKeywordsByQuestion, setCustomKeywordsByQuestion] = useState<Record<string, DictionaryEntry[]>>({});
   const questionPanelRef = useRef<HTMLDivElement | null>(null);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
   const { questions, currentIndex, answers, setSession, setAnswer, setCurrentIndex, next, prev, reset } = usePracticeStore();
@@ -192,11 +194,39 @@ export default function ChapterPracticePage() {
   };
 
   const addAllSuggestedTerms = () => {
-    if (!current || suggestedEntries.length === 0) return;
-    suggestedEntries.forEach((entry) => {
+    if (!current || activeKeywordEntries.length === 0) return;
+    activeKeywordEntries.forEach((entry) => {
       addVocabularyEntry({ ...entry, sourceQuestionId: current.id });
     });
-    setWordHint(`已加入 ${suggestedEntries.length} 個建議關鍵字到字庫`);
+    setWordHint(`已加入 ${activeKeywordEntries.length} 個關鍵字到字庫`);
+  };
+
+  const activeKeywordEntries = useMemo(() => {
+    if (!current) return suggestedEntries;
+    const custom = customKeywordsByQuestion[current.id] ?? [];
+    const map = new Map<string, DictionaryEntry>();
+    [...suggestedEntries, ...custom].forEach((entry) => map.set(entry.term.toLowerCase(), entry));
+    return Array.from(map.values());
+  }, [current, customKeywordsByQuestion, suggestedEntries]);
+
+  const addManualKeyword = async () => {
+    if (!current) return;
+    const term = manualKeywordInput.trim();
+    if (!term) return;
+    const existing = activeKeywordEntries.find((x) => x.term.toLowerCase() === term.toLowerCase());
+    if (existing) {
+      setWordHint(`關鍵字已存在：${term}`);
+      return;
+    }
+    const found = lookupDictionaryTerm(term) ?? (await fetchRealtimeTranslation(term));
+    const entry: DictionaryEntry =
+      found ?? { term, translation: '（暫無翻譯）', definition: '可先加入字庫，後續補充。' };
+    setCustomKeywordsByQuestion((prev) => ({
+      ...prev,
+      [current.id]: [...(prev[current.id] ?? []), entry]
+    }));
+    setManualKeywordInput('');
+    setWordHint(`已新增關鍵字：${entry.term}`);
   };
 
   const speakTerm = (term: string) => {
@@ -206,15 +236,33 @@ export default function ChapterPracticePage() {
     window.speechSynthesis.speak(utter);
   };
 
-  const injectKeywordTranslations = (text: string): string => {
-    if (!inlineKeywordMode || suggestedEntries.length === 0) return text;
-    return suggestedEntries
-      .slice()
-      .sort((a, b) => b.term.length - a.term.length)
-      .reduce((acc, entry) => {
-        const pattern = new RegExp(`\\b${entry.term}\\b`, 'gi');
-        return acc.replace(pattern, entry.translation);
-      }, text);
+  const renderKeywordMixedText = (text: string): ReactNode => {
+    if (!inlineKeywordMode || activeKeywordEntries.length === 0) return text;
+    const terms = activeKeywordEntries
+      .map((entry) => entry.term)
+      .filter((x) => x.trim())
+      .sort((a, b) => b.length - a.length)
+      .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (terms.length === 0) return text;
+    const pattern = new RegExp(`\\b(${terms.join('|')})\\b`, 'gi');
+    const fragments: ReactNode[] = [];
+    let last = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      if (match.index > last) {
+        fragments.push(text.slice(last, match.index));
+      }
+      const original = match[0];
+      const mapped = activeKeywordEntries.find((x) => x.term.toLowerCase() === original.toLowerCase());
+      fragments.push(
+        <span key={`${match.index}-${original}`} className="rounded bg-amber-100 px-1 font-semibold text-amber-800">
+          {mapped?.translation ?? original}
+        </span>
+      );
+      last = pattern.lastIndex;
+    }
+    if (last < text.length) fragments.push(text.slice(last));
+    return fragments;
   };
 
   return (
@@ -248,7 +296,7 @@ export default function ChapterPracticePage() {
       {current && !submitted ? (
         <div ref={questionPanelRef} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
-          <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{injectKeywordTranslations(current.stem)}</h2>
+          <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{renderKeywordMixedText(current.stem)}</h2>
           <p className="mb-3 text-xs text-slate-500">可直接反白英文單字/片語後，點「翻譯選取文字」。</p>
           <div className="mb-3">
             <button
@@ -262,7 +310,7 @@ export default function ChapterPracticePage() {
               目前模式：{inlineKeywordMode ? '中英混合（關鍵字以中文呈現）' : '原文英文'}
             </p>
           </div>
-          {suggestedEntries.length > 0 && (
+          {(activeKeywordEntries.length > 0 || current) && (
             <div className="mb-3">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <p className="text-xs text-slate-500">建議關鍵字：</p>
@@ -275,7 +323,7 @@ export default function ChapterPracticePage() {
                 </button>
               </div>
               <div className="flex flex-wrap gap-1">
-                {suggestedEntries.map((entry) => (
+                {activeKeywordEntries.map((entry) => (
                   <button
                     key={entry.term}
                     type="button"
@@ -288,6 +336,17 @@ export default function ChapterPracticePage() {
                     {entry.term} · {entry.translation}
                   </button>
                 ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input
+                  className="rounded border px-2 py-1 text-xs"
+                  value={manualKeywordInput}
+                  onChange={(e) => setManualKeywordInput(e.target.value)}
+                  placeholder="新增英文關鍵字（例如 signature）"
+                />
+                <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => void addManualKeyword()}>
+                  加入關鍵字
+                </button>
               </div>
             </div>
           )}
@@ -336,7 +395,7 @@ export default function ChapterPracticePage() {
               >
                 <input type="radio" className="mr-2" name={current.id} checked={answers[current.id] === opt.key} onChange={() => setAnswer(current.id, opt.key)} />
                 <span className="font-medium">{opt.key}.</span>{' '}
-                <span className="whitespace-pre-line leading-7">{injectKeywordTranslations(opt.text)}</span>
+                <span className="whitespace-pre-line leading-7">{renderKeywordMixedText(opt.text)}</span>
               </label>
             ))}
           </div>
