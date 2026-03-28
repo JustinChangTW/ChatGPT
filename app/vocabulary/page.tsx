@@ -91,6 +91,12 @@ export default function VocabularyPage() {
           <div className="space-y-3">
             <p className="text-sm text-slate-500">第 {reviewIndex + 1} / {reviewList.length} 張</p>
             <p className="text-2xl font-bold">{current.term}</p>
+            {current.phonetic && <p className="text-sm text-slate-600">發音：{current.phonetic}</p>}
+            {current.audioUrl && (
+              <audio className="w-full max-w-xs" controls src={current.audioUrl}>
+                您的瀏覽器不支援 audio 播放。
+              </audio>
+            )}
             {revealed ? (
               <>
                 <p className="text-lg text-amber-700">{current.translation}</p>
@@ -164,6 +170,12 @@ export default function VocabularyPage() {
                 ) : (
                   <>
                     <p className="font-semibold">{entry.term} → {entry.translation}</p>
+                    {entry.phonetic && <p className="mt-1 text-xs text-slate-600">發音：{entry.phonetic}</p>}
+                    {entry.audioUrl && (
+                      <audio className="mt-1 w-full max-w-xs" controls src={entry.audioUrl}>
+                        您的瀏覽器不支援 audio 播放。
+                      </audio>
+                    )}
                     <p className="mt-1 text-slate-600">{entry.definition}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button

@@ -30,6 +30,8 @@ export default function ChapterPracticePage() {
     term: string;
     translation: string;
     definition: string;
+    phonetic?: string;
+    audioUrl?: string;
     sourceQuestionId?: string;
   } | null>(null);
   const [wordHint, setWordHint] = useState('');
@@ -271,6 +273,12 @@ export default function ChapterPracticePage() {
               <p className="font-semibold">
                 {selectedWord.term} → {selectedWord.translation}
               </p>
+              {selectedWord.phonetic && <p className="mt-1 text-xs text-slate-600">發音：{selectedWord.phonetic}</p>}
+              {selectedWord.audioUrl && (
+                <audio className="mt-1 w-full max-w-xs" controls src={selectedWord.audioUrl}>
+                  您的瀏覽器不支援 audio 播放。
+                </audio>
+              )}
               <p className="mt-1 text-slate-700">{selectedWord.definition}</p>
               <button type="button" className="mt-2 rounded border border-amber-400 bg-white px-2 py-1 text-xs" onClick={saveWord}>
                 加入單字庫
