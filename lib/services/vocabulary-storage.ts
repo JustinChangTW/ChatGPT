@@ -6,6 +6,7 @@ export type VocabularyEntry = DictionaryEntry & {
   id: string;
   sourceQuestionId?: string;
   createdAt: string;
+  proficiencyLevel: 'new' | 'learning' | 'familiar' | 'mastered';
 };
 
 function isBrowser(): boolean {
@@ -25,7 +26,18 @@ export function loadVocabularyBank(): VocabularyEntry[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as VocabularyEntry[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as Array<Partial<VocabularyEntry>>).map((entry) => ({
+      id: entry.id ?? `vocab-${Date.now()}-${(entry.term ?? '').toLowerCase()}`,
+      term: entry.term ?? '',
+      translation: entry.translation ?? '（尚未填寫）',
+      definition: entry.definition ?? '（尚未填寫）',
+      sourceQuestionId: entry.sourceQuestionId,
+      createdAt: entry.createdAt ?? new Date().toISOString(),
+      proficiencyLevel: entry.proficiencyLevel ?? 'new',
+      phonetic: entry.phonetic,
+      audioUrl: entry.audioUrl
+    }));
   } catch {
     return [];
   }
@@ -37,7 +49,8 @@ export function addVocabularyEntry(input: DictionaryEntry & { sourceQuestionId?:
   const next: VocabularyEntry = existing ?? {
     ...input,
     id: `vocab-${Date.now()}-${input.term.toLowerCase()}`,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    proficiencyLevel: 'new'
   };
   const merged = [...all.filter((x) => x.term.toLowerCase() !== input.term.toLowerCase()), next].sort((a, b) => a.term.localeCompare(b.term));
   return persistVocabularyBank(merged);
@@ -74,5 +87,14 @@ export function updateVocabularyEntry(
       definition: (patch.definition ?? entry.definition).trim()
     };
   });
+  return persistVocabularyBank(updated);
+}
+
+export function setVocabularyProficiency(
+  id: string,
+  level: VocabularyEntry['proficiencyLevel']
+): VocabularyEntry[] {
+  const all = loadVocabularyBank();
+  const updated = all.map((entry) => (entry.id === id ? { ...entry, proficiencyLevel: level } : entry));
   return persistVocabularyBank(updated);
 }

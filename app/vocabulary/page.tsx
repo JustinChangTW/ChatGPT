@@ -6,8 +6,16 @@ import {
   clearVocabularyBank,
   loadVocabularyBank,
   removeVocabularyEntry,
+  setVocabularyProficiency,
   updateVocabularyEntry
 } from '@/lib/services/vocabulary-storage';
+
+const PROFICIENCY_OPTIONS: Array<{ value: VocabularyEntry['proficiencyLevel']; label: string; hint: string }> = [
+  { value: 'new', label: 'Lv0 新字', hint: '剛加入，幾乎不熟' },
+  { value: 'learning', label: 'Lv1 學習中', hint: '看過但常忘記' },
+  { value: 'familiar', label: 'Lv2 熟悉', hint: '多數情境可辨識' },
+  { value: 'mastered', label: 'Lv3 精通', hint: '可穩定理解與使用' }
+];
 
 export default function VocabularyPage() {
   const [entries, setEntries] = useState<VocabularyEntry[]>(loadVocabularyBank());
@@ -42,6 +50,11 @@ export default function VocabularyPage() {
     setEntries(next);
     setReviewIndex(0);
     setRevealed(false);
+  };
+
+  const updateLevel = (id: string, level: VocabularyEntry['proficiencyLevel']) => {
+    const next = setVocabularyProficiency(id, level);
+    setEntries(next);
   };
 
   const startEdit = (entry: VocabularyEntry) => {
@@ -85,12 +98,22 @@ export default function VocabularyPage() {
 
       <div className="rounded-xl border bg-white p-4">
         <h2 className="mb-2 text-lg font-semibold">複習卡</h2>
+        <ul className="mb-3 list-disc space-y-1 pl-5 text-xs text-slate-500">
+          {PROFICIENCY_OPTIONS.map((option) => (
+            <li key={option.value}>
+              <span className="font-medium">{option.label}</span>：{option.hint}
+            </li>
+          ))}
+        </ul>
         {!current ? (
           <p className="text-sm text-slate-500">目前沒有單字，先到章節練習加入單字。</p>
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-slate-500">第 {reviewIndex + 1} / {reviewList.length} 張</p>
             <p className="text-2xl font-bold">{current.term}</p>
+            <p className="text-xs text-slate-500">
+              目前熟練度：{PROFICIENCY_OPTIONS.find((x) => x.value === current.proficiencyLevel)?.label ?? current.proficiencyLevel}
+            </p>
             {current.phonetic && <p className="text-sm text-slate-600">發音：{current.phonetic}</p>}
             {current.audioUrl && (
               <audio className="w-full max-w-xs" controls src={current.audioUrl}>
@@ -123,6 +146,18 @@ export default function VocabularyPage() {
               >
                 移除此字
               </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {PROFICIENCY_OPTIONS.map((option) => (
+                <button
+                  key={`review-${option.value}`}
+                  type="button"
+                  className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
+                  onClick={() => updateLevel(current.id, option.value)}
+                >
+                  標記 {option.label}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -170,6 +205,9 @@ export default function VocabularyPage() {
                 ) : (
                   <>
                     <p className="font-semibold">{entry.term} → {entry.translation}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      熟練度：{PROFICIENCY_OPTIONS.find((x) => x.value === entry.proficiencyLevel)?.label ?? entry.proficiencyLevel}
+                    </p>
                     {entry.phonetic && <p className="mt-1 text-xs text-slate-600">發音：{entry.phonetic}</p>}
                     {entry.audioUrl && (
                       <audio className="mt-1 w-full max-w-xs" controls src={entry.audioUrl}>
@@ -192,6 +230,16 @@ export default function VocabularyPage() {
                       >
                         刪除
                       </button>
+                      {PROFICIENCY_OPTIONS.map((option) => (
+                        <button
+                          key={`${entry.id}-${option.value}`}
+                          type="button"
+                          className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
+                          onClick={() => updateLevel(entry.id, option.value)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}
