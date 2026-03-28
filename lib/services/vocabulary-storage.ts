@@ -59,3 +59,20 @@ export function findVocabularyEntry(term: string): VocabularyEntry | null {
   const all = loadVocabularyBank();
   return all.find((entry) => entry.term.toLowerCase() === normalized) ?? null;
 }
+
+export function updateVocabularyEntry(
+  id: string,
+  patch: Partial<Pick<VocabularyEntry, 'term' | 'translation' | 'definition'>>
+): VocabularyEntry[] {
+  const all = loadVocabularyBank();
+  const updated = all.map((entry) => {
+    if (entry.id !== id) return entry;
+    return {
+      ...entry,
+      term: (patch.term ?? entry.term).trim(),
+      translation: (patch.translation ?? entry.translation).trim(),
+      definition: (patch.definition ?? entry.definition).trim()
+    };
+  });
+  return persistVocabularyBank(updated);
+}

@@ -384,6 +384,26 @@ GEN_AI_BASE_URL=
 
 > 注意：`GEN_AI_API_KEY` 不可使用 `NEXT_PUBLIC_` 前綴，否則會被打包到前端。
 
+#### 1-1) 以 ChatGPT / OpenAI 為例，如何取得本系統需要的參數
+你至少需要準備 3 個值：`GEN_AI_PROVIDER`、`GEN_AI_MODEL`、`GEN_AI_API_KEY`。
+
+1. 到 OpenAI Platform 建立 API Key（`https://platform.openai.com/api-keys`）。  
+   - 產生後只會顯示一次，請先保存。  
+2. 決定模型名稱（例如 `gpt-4.1-mini`）。  
+   - 把這個值填入 `GEN_AI_MODEL`。  
+3. 設定 `.env.local`：  
+   ```bash
+   GEN_AI_PROVIDER=openai
+   GEN_AI_MODEL=gpt-4.1-mini
+   GEN_AI_API_KEY=sk-xxxx
+   ```
+4. 若你經過自建 API Gateway 才轉發到 OpenAI，再加上：  
+   ```bash
+   GEN_AI_BASE_URL=https://your-gateway.example.com
+   ```
+
+> 若你只使用目前內建的「字典 + 即時翻譯 fallback」，可先不設定上述 Gen AI 參數；等要上 AI 助教再補即可。
+
 #### 2) 呼叫路徑建議
 1. 前端頁面（如錯題本）送出問題到 `/api/ai/explain-question`。  
 2. API Route 讀取 `GEN_AI_*` 設定後呼叫 LLM。  

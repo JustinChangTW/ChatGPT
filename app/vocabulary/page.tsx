@@ -5,13 +5,18 @@ import {
   VocabularyEntry,
   clearVocabularyBank,
   loadVocabularyBank,
-  removeVocabularyEntry
+  removeVocabularyEntry,
+  updateVocabularyEntry
 } from '@/lib/services/vocabulary-storage';
 
 export default function VocabularyPage() {
   const [entries, setEntries] = useState<VocabularyEntry[]>(loadVocabularyBank());
   const [reviewIndex, setReviewIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTerm, setEditTerm] = useState('');
+  const [editTranslation, setEditTranslation] = useState('');
+  const [editDefinition, setEditDefinition] = useState('');
 
   const reviewList = useMemo(
     () => [...entries].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
@@ -37,6 +42,31 @@ export default function VocabularyPage() {
     setEntries(next);
     setReviewIndex(0);
     setRevealed(false);
+  };
+
+  const startEdit = (entry: VocabularyEntry) => {
+    setEditingId(entry.id);
+    setEditTerm(entry.term);
+    setEditTranslation(entry.translation);
+    setEditDefinition(entry.definition);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditTerm('');
+    setEditTranslation('');
+    setEditDefinition('');
+  };
+
+  const saveEdit = (id: string) => {
+    if (!editTerm.trim()) return;
+    const next = updateVocabularyEntry(id, {
+      term: editTerm,
+      translation: editTranslation || '（尚未填寫）',
+      definition: editDefinition || '（尚未填寫）'
+    });
+    setEntries(next);
+    cancelEdit();
   };
 
   return (
@@ -100,8 +130,49 @@ export default function VocabularyPage() {
           <ul className="space-y-2 text-sm">
             {entries.map((entry) => (
               <li key={entry.id} className="rounded border p-3">
-                <p className="font-semibold">{entry.term} → {entry.translation}</p>
-                <p className="mt-1 text-slate-600">{entry.definition}</p>
+                {editingId === entry.id ? (
+                  <div className="space-y-2">
+                    <input
+                      className="w-full rounded border px-2 py-1"
+                      value={editTerm}
+                      onChange={(e) => setEditTerm(e.target.value)}
+                      placeholder="英文單字"
+                    />
+                    <input
+                      className="w-full rounded border px-2 py-1"
+                      value={editTranslation}
+                      onChange={(e) => setEditTranslation(e.target.value)}
+                      placeholder="中文翻譯"
+                    />
+                    <textarea
+                      className="w-full rounded border px-2 py-1"
+                      rows={2}
+                      value={editDefinition}
+                      onChange={(e) => setEditDefinition(e.target.value)}
+                      placeholder="補充解釋"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => saveEdit(entry.id)}>
+                        儲存
+                      </button>
+                      <button type="button" className="rounded border px-2 py-1 text-xs" onClick={cancelEdit}>
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="font-semibold">{entry.term} → {entry.translation}</p>
+                    <p className="mt-1 text-slate-600">{entry.definition}</p>
+                    <button
+                      type="button"
+                      className="mt-2 rounded border px-2 py-1 text-xs hover:bg-slate-50"
+                      onClick={() => startEdit(entry)}
+                    >
+                      編輯
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>
