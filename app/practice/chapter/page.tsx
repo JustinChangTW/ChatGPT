@@ -30,10 +30,13 @@ export default function ChapterPracticePage() {
     term: string;
     translation: string;
     definition: string;
+    phonetic?: string;
+    audioUrl?: string;
     sourceQuestionId?: string;
   } | null>(null);
   const [wordHint, setWordHint] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
+  const [inlineKeywordMode, setInlineKeywordMode] = useState(false);
   const questionPanelRef = useRef<HTMLDivElement | null>(null);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
   const { questions, currentIndex, answers, setSession, setAnswer, setCurrentIndex, next, prev, reset } = usePracticeStore();
@@ -196,6 +199,17 @@ export default function ChapterPracticePage() {
     setWordHint(`已加入 ${suggestedEntries.length} 個建議關鍵字到字庫`);
   };
 
+  const injectKeywordTranslations = (text: string): string => {
+    if (!inlineKeywordMode || suggestedEntries.length === 0) return text;
+    return suggestedEntries
+      .slice()
+      .sort((a, b) => b.term.length - a.term.length)
+      .reduce((acc, entry) => {
+        const pattern = new RegExp(`\\b${entry.term}\\b`, 'gi');
+        return acc.replace(pattern, entry.translation);
+      }, text);
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Chapter Practice</h1>
@@ -227,8 +241,17 @@ export default function ChapterPracticePage() {
       {current && !submitted ? (
         <div ref={questionPanelRef} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
-          <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{current.stem}</h2>
+          <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{injectKeywordTranslations(current.stem)}</h2>
           <p className="mb-3 text-xs text-slate-500">可直接反白英文單字/片語後，點「翻譯選取文字」。</p>
+          <div className="mb-3">
+            <button
+              type="button"
+              className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
+              onClick={() => setInlineKeywordMode((v) => !v)}
+            >
+              {inlineKeywordMode ? '切回原文顯示' : '關鍵字中英混合顯示'}
+            </button>
+          </div>
           {suggestedEntries.length > 0 && (
             <div className="mb-3">
               <div className="mb-1 flex items-center justify-between gap-2">
@@ -271,6 +294,12 @@ export default function ChapterPracticePage() {
               <p className="font-semibold">
                 {selectedWord.term} → {selectedWord.translation}
               </p>
+              {selectedWord.phonetic && <p className="mt-1 text-xs text-slate-600">發音：{selectedWord.phonetic}</p>}
+              {selectedWord.audioUrl && (
+                <audio className="mt-1 w-full max-w-xs" controls src={selectedWord.audioUrl}>
+                  您的瀏覽器不支援 audio 播放。
+                </audio>
+              )}
               <p className="mt-1 text-slate-700">{selectedWord.definition}</p>
               <button type="button" className="mt-2 rounded border border-amber-400 bg-white px-2 py-1 text-xs" onClick={saveWord}>
                 加入單字庫
@@ -288,7 +317,7 @@ export default function ChapterPracticePage() {
               >
                 <input type="radio" className="mr-2" name={current.id} checked={answers[current.id] === opt.key} onChange={() => setAnswer(current.id, opt.key)} />
                 <span className="font-medium">{opt.key}.</span>{' '}
-                <span className="whitespace-pre-line leading-7">{opt.text}</span>
+                <span className="whitespace-pre-line leading-7">{injectKeywordTranslations(opt.text)}</span>
               </label>
             ))}
           </div>

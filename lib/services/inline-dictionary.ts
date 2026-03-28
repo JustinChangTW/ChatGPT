@@ -2,6 +2,8 @@ export type DictionaryEntry = {
   term: string;
   translation: string;
   definition: string;
+  phonetic?: string;
+  audioUrl?: string;
 };
 
 const BUILTIN_DICTIONARY: Record<string, DictionaryEntry> = {
