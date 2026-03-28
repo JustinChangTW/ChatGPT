@@ -75,7 +75,7 @@ export function findVocabularyEntry(term: string): VocabularyEntry | null {
 
 export function updateVocabularyEntry(
   id: string,
-  patch: Partial<Pick<VocabularyEntry, 'term' | 'translation' | 'definition'>>
+  patch: Partial<Pick<VocabularyEntry, 'term' | 'translation' | 'definition' | 'phonetic' | 'audioUrl'>>
 ): VocabularyEntry[] {
   const all = loadVocabularyBank();
   const updated = all.map((entry) => {
@@ -84,7 +84,9 @@ export function updateVocabularyEntry(
       ...entry,
       term: (patch.term ?? entry.term).trim(),
       translation: (patch.translation ?? entry.translation).trim(),
-      definition: (patch.definition ?? entry.definition).trim()
+      definition: (patch.definition ?? entry.definition).trim(),
+      phonetic: patch.phonetic ?? entry.phonetic,
+      audioUrl: patch.audioUrl ?? entry.audioUrl
     };
   });
   return persistVocabularyBank(updated);
