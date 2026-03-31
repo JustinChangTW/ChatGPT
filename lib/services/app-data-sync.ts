@@ -8,6 +8,7 @@ import { loadChapterProgress, saveChapterProgress } from '@/lib/services/chapter
 import { loadVocabularyBank } from '@/lib/services/vocabulary-storage';
 import { loadDictionaryProviders, saveDictionaryProviders } from '@/lib/services/dictionary-provider-config';
 import { loadCustomKeywords, saveCustomKeywords } from '@/lib/services/custom-keyword-storage';
+import { loadAIParamsConfig, saveAIParamsConfig } from '@/lib/services/ai-params-config';
 
 const SHARED_DOC = { collection: 'publicData', id: 'cctShared' } as const;
 type SyncFailReason = 'firebase-not-configured' | 'unknown';
@@ -37,6 +38,7 @@ export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?:
       vocabularyBank: loadVocabularyBank(),
       dictionaryProviders: loadDictionaryProviders(),
       customKeywords: loadCustomKeywords(),
+      aiParams: loadAIParamsConfig(),
       updatedAt: serverTimestamp(),
       version: 1
     });
@@ -66,6 +68,7 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
     vocabularyBank: number;
     customKeywords: number;
     dictionaryProviders: number;
+    aiParams: boolean;
   };
 }> {
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
@@ -85,6 +88,7 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
     }
     if (Array.isArray(data.dictionaryProviders)) saveDictionaryProviders(data.dictionaryProviders);
     if (data.customKeywords && typeof data.customKeywords === 'object') saveCustomKeywords(data.customKeywords);
+    if (data.aiParams && typeof data.aiParams === 'object') saveAIParamsConfig(data.aiParams);
 
     return {
       ok: true,
@@ -95,7 +99,8 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
         chapterProgress: Array.isArray(data.chapterProgress) ? data.chapterProgress.length : 0,
         vocabularyBank: Array.isArray(data.vocabularyBank) ? data.vocabularyBank.length : 0,
         customKeywords: data.customKeywords && typeof data.customKeywords === 'object' ? Object.keys(data.customKeywords).length : 0,
-        dictionaryProviders: Array.isArray(data.dictionaryProviders) ? data.dictionaryProviders.length : 0
+        dictionaryProviders: Array.isArray(data.dictionaryProviders) ? data.dictionaryProviders.length : 0,
+        aiParams: !!(data.aiParams && typeof data.aiParams === 'object')
       }
     };
   } catch (err) {

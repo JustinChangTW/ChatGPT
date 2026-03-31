@@ -7,6 +7,7 @@ const navItems = [
   ['Dashboard', '/dashboard'],
   ['章節練習', '/practice/chapter'],
   ['正式模擬考', '/exam'],
+  ['知識庫', '/knowledge-base'],
   ['單字庫', '/vocabulary'],
   ['錯題本', '/wrong-notebook'],
   ['歷史分析', '/history'],
@@ -42,7 +43,7 @@ export function AppShell({
         </div>
       </footer>
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 px-2 py-2 backdrop-blur sm:hidden">
-        <div className="grid grid-cols-4 gap-1 text-xs">
+        <div className="grid grid-cols-5 gap-1 text-xs">
           {navItems.map(([label, href]) => (
             <Link key={`mobile-${href}`} href={href} className="rounded px-2 py-2 text-center font-medium text-slate-700 hover:bg-slate-100">
               {label}

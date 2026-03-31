@@ -27,6 +27,7 @@ import {
   loadDictionaryProviders,
   saveDictionaryProviders
 } from '@/lib/services/dictionary-provider-config';
+import { AIParamsConfig, loadAIParamsConfig, saveAIParamsConfig } from '@/lib/services/ai-params-config';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -54,6 +55,7 @@ export default function AdminPage() {
   const [isQuickChecking, setIsQuickChecking] = useState(false);
   const [currentHostname, setCurrentHostname] = useState('');
   const [dictionaryProviders, setDictionaryProviders] = useState<DictionaryProviderConfig[]>([]);
+  const [aiParams, setAIParams] = useState<AIParamsConfig>(loadAIParamsConfig());
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
     apiKey: '',
     authDomain: '',
@@ -102,6 +104,7 @@ export default function AdminPage() {
       setFirebaseForm(runtimeCfg);
     }
     setDictionaryProviders(loadDictionaryProviders());
+    setAIParams(loadAIParamsConfig());
 
     if (!auth) {
       setUserLabel('Firebase 未設定');
@@ -298,6 +301,12 @@ export default function AdminPage() {
     setResult('已儲存字典 API 設定（主/備援順序）。');
   };
 
+  const saveAIParameterSettings = () => {
+    const saved = saveAIParamsConfig(aiParams);
+    setAIParams(saved);
+    setResult('已儲存 AI 參數設定。');
+  };
+
   const list = useMemo(
     () =>
       bank.filter(
@@ -442,7 +451,7 @@ export default function AdminPage() {
       logAction('firebase.pushAllData', res.ok ? 'success' : 'fail', res);
       setResult(
         res.ok
-          ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度/單字庫/關鍵字記錄/字典 API 設定）」同步到 Firebase。'
+          ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度/單字庫/關鍵字記錄/字典 API 設定/AI 參數）」同步到 Firebase。'
           : `全量同步失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`
       );
     } catch (err) {
@@ -452,7 +461,7 @@ export default function AdminPage() {
   };
 
   const allDataPulledSummary = (stats: NonNullable<Awaited<ReturnType<typeof hydrateAllLocalDataFromCloud>>['stats']>) =>
-    `已從 Firebase 拉取全部資料：題庫 ${stats.questionBank}、歷史 ${stats.practiceAttempts}、錯題本 ${stats.wrongNotebook}、章節進度 ${stats.chapterProgress}、單字庫 ${stats.vocabularyBank}、關鍵字記錄 ${stats.customKeywords}、字典 API 設定 ${stats.dictionaryProviders}。`;
+    `已從 Firebase 拉取全部資料：題庫 ${stats.questionBank}、歷史 ${stats.practiceAttempts}、錯題本 ${stats.wrongNotebook}、章節進度 ${stats.chapterProgress}、單字庫 ${stats.vocabularyBank}、關鍵字記錄 ${stats.customKeywords}、字典 API 設定 ${stats.dictionaryProviders}、AI 參數 ${stats.aiParams ? '有' : '無'}。`;
 
   const pullAllCloud = async () => {
     logAction('sync.pullAllData', 'start');
@@ -548,7 +557,7 @@ export default function AdminPage() {
             '全量從 Firebase 拉取',
             !!pullAll.ok,
             pullAll.ok && pullAll.stats
-              ? `成功（題庫${pullAll.stats.questionBank}/歷史${pullAll.stats.practiceAttempts}/錯題本${pullAll.stats.wrongNotebook}/章節${pullAll.stats.chapterProgress}/單字${pullAll.stats.vocabularyBank}/關鍵字${pullAll.stats.customKeywords}/字典API${pullAll.stats.dictionaryProviders}）`
+              ? `成功（題庫${pullAll.stats.questionBank}/歷史${pullAll.stats.practiceAttempts}/錯題本${pullAll.stats.wrongNotebook}/章節${pullAll.stats.chapterProgress}/單字${pullAll.stats.vocabularyBank}/關鍵字${pullAll.stats.customKeywords}/字典API${pullAll.stats.dictionaryProviders}/AI參數${pullAll.stats.aiParams ? '有' : '無'}）`
               : `${pullAll.reason}${pullAll.error ? ` | ${pullAll.error}` : ''}`
           );
         }
@@ -757,6 +766,96 @@ export default function AdminPage() {
           <button type="button" className="rounded bg-blue-600 px-3 py-2 text-white" onClick={saveDictionaryProviderSettings}>
             儲存 API 設定
           </button>
+        </div>
+
+        <div className="mt-4 rounded border bg-slate-50 p-3">
+          <h3 className="text-sm font-semibold">B-2. AI 參數設定</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            可在 Admin 設定 AI 參數（模型、溫度、Top P、Max Tokens、語系、翻譯 API URL）。
+          </p>
+          <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
+            <label className="space-y-1">
+              <span>模型名稱</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                value={aiParams.model}
+                onChange={(e) => setAIParams((prev) => ({ ...prev, model: e.target.value }))}
+              />
+            </label>
+            <label className="space-y-1">
+              <span>啟用 AI 翻譯</span>
+              <input
+                type="checkbox"
+                checked={aiParams.enabled}
+                onChange={(e) => setAIParams((prev) => ({ ...prev, enabled: e.target.checked }))}
+              />
+            </label>
+            <label className="space-y-1">
+              <span>Temperature（0~2）</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={aiParams.temperature}
+                onChange={(e) => setAIParams((prev) => ({ ...prev, temperature: Number(e.target.value) }))}
+              />
+            </label>
+            <label className="space-y-1">
+              <span>Top P（0~1）</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={aiParams.topP}
+                onChange={(e) => setAIParams((prev) => ({ ...prev, topP: Number(e.target.value) }))}
+              />
+            </label>
+            <label className="space-y-1">
+              <span>Max Tokens</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                type="number"
+                min={1}
+                max={4000}
+                step={1}
+                value={aiParams.maxTokens}
+                onChange={(e) => setAIParams((prev) => ({ ...prev, maxTokens: Number(e.target.value) }))}
+              />
+            </label>
+            <label className="space-y-1">
+              <span>來源語系</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                value={aiParams.sourceLang}
+                onChange={(e) => setAIParams((prev) => ({ ...prev, sourceLang: e.target.value }))}
+              />
+            </label>
+            <label className="space-y-1">
+              <span>目標語系</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                value={aiParams.targetLang}
+                onChange={(e) => setAIParams((prev) => ({ ...prev, targetLang: e.target.value }))}
+              />
+            </label>
+            <label className="space-y-1 md:col-span-2">
+              <span>翻譯 API URL（支援 {'{text}'}、{'{source}'}、{'{target}'}）</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                value={aiParams.translationEndpoint}
+                onChange={(e) => setAIParams((prev) => ({ ...prev, translationEndpoint: e.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="mt-2">
+            <button type="button" className="rounded bg-blue-600 px-3 py-2 text-white" onClick={saveAIParameterSettings}>
+              儲存 AI 參數
+            </button>
+          </div>
         </div>
       </div>
 

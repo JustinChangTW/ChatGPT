@@ -1,5 +1,6 @@
 import { DictionaryEntry } from '@/lib/services/inline-dictionary';
 import { DictionaryProviderConfig, loadDictionaryProviders } from '@/lib/services/dictionary-provider-config';
+import { loadAIParamsConfig } from '@/lib/services/ai-params-config';
 
 const cache = new Map<string, DictionaryEntry>();
 
@@ -41,12 +42,20 @@ export async function fetchRealtimeTranslation(term: string): Promise<Dictionary
   if (cache.has(normalized)) return cache.get(normalized) ?? null;
 
   try {
-    const translateRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(normalized)}&langpair=en|zh-TW`);
-
-    const translateData = translateRes.ok
-      ? ((await translateRes.json()) as { responseData?: { translatedText?: string } })
-      : null;
-    const translated = translateData?.responseData?.translatedText?.trim() ?? '';
+    const aiParams = loadAIParamsConfig();
+    const translated = aiParams.enabled
+      ? await (async () => {
+          const translationUrl = aiParams.translationEndpoint
+            .replace('{text}', encodeURIComponent(normalized))
+            .replace('{source}', encodeURIComponent(aiParams.sourceLang))
+            .replace('{target}', encodeURIComponent(aiParams.targetLang));
+          const translateRes = await fetch(translationUrl);
+          const translateData = translateRes.ok
+            ? ((await translateRes.json()) as { responseData?: { translatedText?: string } })
+            : null;
+          return translateData?.responseData?.translatedText?.trim() ?? '';
+        })()
+      : '';
 
     const providers = loadDictionaryProviders().filter((x) => x.enabled);
     let phonetic: string | undefined;
@@ -76,10 +85,12 @@ export async function fetchRealtimeTranslation(term: string): Promise<Dictionary
     if (!translated && !englishDefinition) return null;
     const entry: DictionaryEntry = {
       term: normalized,
-      translation: translated || '（查無中文翻譯）',
+      translation: aiParams.enabled ? translated || '（查無中文翻譯）' : '（AI 翻譯已停用）',
       definition: englishDefinition
         ? `${englishDefinition}（來源：${definitionSource || 'Dictionary API'}）`
-        : `即時翻譯（來源：MyMemory）`,
+        : aiParams.enabled
+          ? `即時翻譯（來源：${aiParams.model}）`
+          : '即時翻譯已停用（可在 Admin 啟用）',
       phonetic,
       audioUrl
     };
