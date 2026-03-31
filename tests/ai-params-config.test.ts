@@ -15,11 +15,12 @@ describe('ai params config storage', () => {
       maxTokens: 0,
       sourceLang: 'en',
       targetLang: 'zh-TW',
-      translationEndpoint: 'https://example.com?q={text}&langpair={source}|{target}'
+      translationEndpoint: 'http://example.com?q={text}&langpair={source}|{target}'
     });
 
     expect(saved.temperature).toBe(2);
     expect(saved.topP).toBe(0);
     expect(saved.maxTokens).toBe(1);
+    expect(saved.translationEndpoint).toContain('api.mymemory.translated.net');
   });
 });

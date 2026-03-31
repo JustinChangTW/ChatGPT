@@ -4,7 +4,7 @@ import { ChangeEventHandler, DragEventHandler, useEffect, useMemo, useRef, useSt
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { getRedirectResult, onAuthStateChanged, signInWithRedirect, signOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, getRedirectResult, onAuthStateChanged, signInWithEmailAndPassword, signInWithRedirect, signOut } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { Question } from '@/lib/schemas/question';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
@@ -42,6 +42,10 @@ type FirebaseForm = {
   messagingSenderId: string;
   appId: string;
 };
+type EmailAuthForm = {
+  email: string;
+  password: string;
+};
 
 export default function AdminPage() {
   const [result, setResult] = useState<string>('');
@@ -56,6 +60,7 @@ export default function AdminPage() {
   const [currentHostname, setCurrentHostname] = useState('');
   const [dictionaryProviders, setDictionaryProviders] = useState<DictionaryProviderConfig[]>([]);
   const [aiParams, setAIParams] = useState<AIParamsConfig>(loadAIParamsConfig());
+  const [emailAuthForm, setEmailAuthForm] = useState<EmailAuthForm>({ email: '', password: '' });
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
     apiKey: '',
     authDomain: '',
@@ -379,6 +384,54 @@ export default function AdminPage() {
     }
   };
 
+  const loginWithEmailPassword = async () => {
+    logAction('firebase.loginEmailPassword', 'start');
+    if (!auth) {
+      logAction('firebase.loginEmailPassword', 'fail', { reason: 'firebase-not-configured' });
+      setResult('Firebase 未設定，無法進行帳號登入。');
+      return;
+    }
+    const email = emailAuthForm.email.trim();
+    const password = emailAuthForm.password;
+    if (!email || password.length < 6) {
+      setResult('請輸入有效 Email 與至少 6 碼密碼。');
+      return;
+    }
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      setUserLabel(cred.user.email ?? cred.user.uid);
+      logAction('firebase.loginEmailPassword', 'success', { user: cred.user.email ?? cred.user.uid });
+      setResult('Email/密碼登入成功。');
+    } catch (err) {
+      logAction('firebase.loginEmailPassword', 'fail', { reason: err instanceof Error ? err.message : String(err) });
+      setResult(`Email/密碼登入失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+    }
+  };
+
+  const registerWithEmailPassword = async () => {
+    logAction('firebase.registerEmailPassword', 'start');
+    if (!auth) {
+      logAction('firebase.registerEmailPassword', 'fail', { reason: 'firebase-not-configured' });
+      setResult('Firebase 未設定，無法註冊帳號。');
+      return;
+    }
+    const email = emailAuthForm.email.trim();
+    const password = emailAuthForm.password;
+    if (!email || password.length < 6) {
+      setResult('請輸入有效 Email 與至少 6 碼密碼。');
+      return;
+    }
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      setUserLabel(cred.user.email ?? cred.user.uid);
+      logAction('firebase.registerEmailPassword', 'success', { user: cred.user.email ?? cred.user.uid });
+      setResult('Email/密碼註冊成功，已自動登入。');
+    } catch (err) {
+      logAction('firebase.registerEmailPassword', 'fail', { reason: err instanceof Error ? err.message : String(err) });
+      setResult(`Email/密碼註冊失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+    }
+  };
+
   const connectAnonymous = async () => {
     logAction('firebase.connectAnonymous', 'start');
     const session = await ensureFirebaseUser();
@@ -576,7 +629,7 @@ export default function AdminPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
-      <p className="text-sm text-slate-500">已依功能分區：A 同步與登入、B 字典 API 設定、C 題庫匯入管理。</p>
+      <p className="text-sm text-slate-500">已依功能分區：A 同步與登入（含自建帳密）、B 字典 API 設定、C 題庫匯入管理。</p>
       <h2 className="text-lg font-semibold">A. Firebase 同步與登入</h2>
       <div className="rounded border bg-white p-3 text-sm">
         <p>目前狀態：{firebaseStatusText}</p>
@@ -599,6 +652,20 @@ export default function AdminPage() {
             disabled={!hasFirebaseConfig}
           >
             Google 登入（選用）
+          </button>
+          <button
+            className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={loginWithEmailPassword}
+            disabled={!hasFirebaseConfig}
+          >
+            帳密登入
+          </button>
+          <button
+            className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={registerWithEmailPassword}
+            disabled={!hasFirebaseConfig}
+          >
+            建立帳號
           </button>
           <button
             className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -655,6 +722,32 @@ export default function AdminPage() {
             Google/Firebase 功能已停用。請先在 GitHub Actions Secrets 或 .env.local 設定
             NEXT_PUBLIC_FIREBASE_*。
           </p>
+        )}
+        {hasFirebaseConfig && (
+          <div className="mt-2 grid gap-2 rounded border bg-slate-50 p-2 text-xs md:grid-cols-2">
+            <label className="space-y-1">
+              <span>Email（自建帳號）</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                type="email"
+                value={emailAuthForm.email}
+                onChange={(e) => setEmailAuthForm((s) => ({ ...s, email: e.target.value }))}
+                placeholder="you@example.com"
+              />
+            </label>
+            <label className="space-y-1">
+              <span>Password（至少 6 碼）</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                type="password"
+                value={emailAuthForm.password}
+                onChange={(e) => setEmailAuthForm((s) => ({ ...s, password: e.target.value }))}
+              />
+            </label>
+            <p className="md:col-span-2 text-slate-500">
+              若你所在環境無法使用 Google，請先在 Firebase Authentication 啟用 Email/Password provider，再用此區建立帳號並登入。
+            </p>
+          </div>
         )}
         <p className="mt-2 text-xs text-slate-500">
           不登入 Google 也可以：匯入題庫、章節練習、模擬考、錯題本與歷史分析都可在本機模式使用。

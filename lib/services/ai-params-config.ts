@@ -26,6 +26,20 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function isSafeTranslationEndpoint(endpoint: string): boolean {
+  if (!endpoint.includes('{text}') || !endpoint.includes('{source}') || !endpoint.includes('{target}')) return false;
+  try {
+    const normalized = endpoint
+      .replace('{text}', 'hello')
+      .replace('{source}', 'en')
+      .replace('{target}', 'zh-TW');
+    const url = new URL(normalized);
+    return url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function loadAIParamsConfig(): AIParamsConfig {
   if (typeof window === 'undefined') return DEFAULT_CONFIG;
   try {
@@ -40,7 +54,9 @@ export function loadAIParamsConfig(): AIParamsConfig {
       maxTokens: clamp(Number(parsed.maxTokens ?? DEFAULT_CONFIG.maxTokens), 1, 4000),
       sourceLang: parsed.sourceLang?.trim() || DEFAULT_CONFIG.sourceLang,
       targetLang: parsed.targetLang?.trim() || DEFAULT_CONFIG.targetLang,
-      translationEndpoint: parsed.translationEndpoint?.trim() || DEFAULT_CONFIG.translationEndpoint
+      translationEndpoint: isSafeTranslationEndpoint(parsed.translationEndpoint?.trim() || '')
+        ? (parsed.translationEndpoint as string).trim()
+        : DEFAULT_CONFIG.translationEndpoint
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -56,7 +72,9 @@ export function saveAIParamsConfig(config: AIParamsConfig): AIParamsConfig {
     maxTokens: clamp(Number(config.maxTokens), 1, 4000),
     sourceLang: config.sourceLang.trim() || DEFAULT_CONFIG.sourceLang,
     targetLang: config.targetLang.trim() || DEFAULT_CONFIG.targetLang,
-    translationEndpoint: config.translationEndpoint.trim() || DEFAULT_CONFIG.translationEndpoint
+    translationEndpoint: isSafeTranslationEndpoint(config.translationEndpoint.trim())
+      ? config.translationEndpoint.trim()
+      : DEFAULT_CONFIG.translationEndpoint
   };
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
