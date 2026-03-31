@@ -77,6 +77,19 @@ export default function ChapterPracticePage() {
     return { detail, correctCount, score };
   }, [questions, answers]);
 
+  const chapterProgressCards = useMemo(
+    () =>
+      chapters.map((ch) => {
+        const p = progress.find((x) => x.chapter === ch);
+        const attempts = p?.attempts ?? 0;
+        const completed = p?.completed ?? 0;
+        const completionRate = attempts > 0 ? Math.round((completed / attempts) * 100) : 0;
+        const lastScore = p?.lastScore ?? 0;
+        return { chapter: ch, attempts, completed, completionRate, lastScore };
+      }),
+    [chapters, progress]
+  );
+
   const suggestedEntries = useMemo(() => {
     if (!current) return [];
     const dictionaryTerms = new Set(getBuiltinDictionaryTerms());
@@ -275,22 +288,49 @@ export default function ChapterPracticePage() {
         </select>
         <button className="rounded bg-blue-600 px-4 py-3 text-white" onClick={startPractice}>開始 10 題練習</button>
       </div>
-      <div className="rounded border bg-white p-4">
-        <p className="mb-2 text-sm font-semibold">章節進度追蹤</p>
-        <ul className="space-y-1 text-sm">
-          {chapters.map((ch) => {
-            const p = progress.find((x) => x.chapter === ch);
-            const doneRate = p ? Math.round((p.completed / Math.max(p.attempts, 1)) * 100) : 0;
-            return (
-              <li key={ch} className="flex flex-col gap-1 border-b pb-2 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-                <span>{ch}</span>
-                <span className="text-slate-600">
-                  {p ? `完成 ${p.completed}/${p.attempts} 次 · 最近 ${p.lastScore} 分 · 完成率 ${doneRate}%` : '尚未作答'}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-base font-semibold">章節進度追蹤</p>
+          <p className="text-xs text-slate-500">以完成率 + 最近分數觀察學習狀態</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {chapterProgressCards.map((item) => (
+            <div
+              key={item.chapter}
+              className={`rounded-xl border p-3 transition ${
+                item.chapter === selectedChapter ? 'border-blue-300 bg-blue-50/50 shadow-sm' : 'border-slate-200 bg-slate-50/40'
+              }`}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  className="text-left text-sm font-semibold text-slate-800 hover:text-blue-700"
+                  onClick={() => setSelectedChapter(item.chapter)}
+                >
+                  {item.chapter}
+                </button>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    item.lastScore >= 80
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : item.lastScore >= 60
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  最近 {item.lastScore} 分
                 </span>
-              </li>
-            );
-          })}
-        </ul>
+              </div>
+              <div className="mb-1 h-2 w-full overflow-hidden rounded bg-slate-200">
+                <div className="h-full rounded bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${item.completionRate}%` }} />
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span>完成 {item.completed}/{item.attempts || 0} 次</span>
+                <span>完成率 {item.completionRate}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {current && !submitted ? (

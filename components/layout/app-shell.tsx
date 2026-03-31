@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 
 const navItems = [
   ['Dashboard', '/dashboard'],
@@ -21,6 +22,7 @@ export function AppShell({
   children: ReactNode;
   buildInfo: { version: string; buildTime: string };
 }) {
+  const pathname = usePathname();
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b bg-white">
@@ -28,7 +30,9 @@ export function AppShell({
           {navItems.map(([label, href]) => (
             <Link
               key={href}
-              className="whitespace-nowrap rounded px-3 py-2 font-medium text-slate-700 hover:bg-slate-100"
+              className={`whitespace-nowrap rounded px-3 py-2 font-medium transition ${
+                pathname === href ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+              }`}
               href={href}
             >
               {label}
@@ -45,7 +49,13 @@ export function AppShell({
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 px-2 py-2 backdrop-blur sm:hidden">
         <div className="grid grid-cols-5 gap-1 text-xs">
           {navItems.map(([label, href]) => (
-            <Link key={`mobile-${href}`} href={href} className="rounded px-2 py-2 text-center font-medium text-slate-700 hover:bg-slate-100">
+            <Link
+              key={`mobile-${href}`}
+              href={href}
+              className={`rounded px-2 py-2 text-center font-medium transition ${
+                pathname === href ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
               {label}
             </Link>
           ))}

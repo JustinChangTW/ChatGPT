@@ -57,6 +57,7 @@ export default function AdminPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [showFirebaseSettings, setShowFirebaseSettings] = useState(false);
   const [isQuickChecking, setIsQuickChecking] = useState(false);
+  const [activeAdminTab, setActiveAdminTab] = useState<'sync' | 'api' | 'bank'>('sync');
   const [currentHostname, setCurrentHostname] = useState('');
   const [dictionaryProviders, setDictionaryProviders] = useState<DictionaryProviderConfig[]>([]);
   const [aiParams, setAIParams] = useState<AIParamsConfig>(loadAIParamsConfig());
@@ -629,7 +630,30 @@ export default function AdminPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
-      <p className="text-sm text-slate-500">已依功能分區：A 同步與登入（含自建帳密）、B 字典 API 設定、C 題庫匯入管理。</p>
+      <p className="text-sm text-slate-500">依使用流程分區：先做身份與同步，再調整 API，最後做題庫匯入管理。</p>
+      <div className="rounded-xl border bg-white p-2">
+        <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+          {[
+            { id: 'sync', label: 'A. 同步與登入' },
+            { id: 'api', label: 'B. API 與 AI 參數' },
+            { id: 'bank', label: 'C. 題庫匯入管理' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveAdminTab(tab.id as 'sync' | 'api' | 'bank')}
+              className={`rounded-lg px-3 py-2 text-left transition ${
+                activeAdminTab === tab.id ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeAdminTab === 'sync' && (
+        <>
       <h2 className="text-lg font-semibold">A. Firebase 同步與登入</h2>
       <div className="rounded border bg-white p-3 text-sm">
         <p>目前狀態：{firebaseStatusText}</p>
@@ -803,7 +827,11 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+        </>
+      )}
 
+      {activeAdminTab === 'api' && (
+        <>
       <h2 className="text-lg font-semibold">B. 字典 API 設定（主 / 備援）</h2>
       <div className="rounded border bg-white p-3 text-sm">
         <p className="text-xs text-slate-500">
@@ -951,7 +979,11 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+        </>
+      )}
 
+      {activeAdminTab === 'bank' && (
+        <>
       <h2 className="text-lg font-semibold">C. 題庫匯入與資料管理</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-2 rounded border bg-white p-4">
         <div
@@ -1104,6 +1136,8 @@ export default function AdminPage() {
           <option value="practical">practical</option>
         </select>
       </div>
+        </>
+      )}
 
       <div className="rounded border bg-white p-4 text-sm">
         <p className="mb-2 font-semibold">題目列表（{list.length}）</p>
