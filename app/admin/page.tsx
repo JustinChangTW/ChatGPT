@@ -48,6 +48,10 @@ type EmailAuthForm = {
   email: string;
   password: string;
 };
+type EmailAuthFormErrors = {
+  email?: string;
+  password?: string;
+};
 
 export default function AdminPage() {
   const [result, setResult] = useState<string>('');
@@ -69,6 +73,7 @@ export default function AdminPage() {
   const [knowledgeSearch, setKnowledgeSearch] = useState('');
   const [knowledgeJson, setKnowledgeJson] = useState('');
   const [emailAuthForm, setEmailAuthForm] = useState<EmailAuthForm>({ email: '', password: '' });
+  const [emailAuthErrors, setEmailAuthErrors] = useState<EmailAuthFormErrors>({});
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
     apiKey: '',
     authDomain: '',
@@ -488,8 +493,10 @@ export default function AdminPage() {
     }
     const email = emailAuthForm.email.trim();
     const password = emailAuthForm.password;
-    if (!email || password.length < 6) {
-      setResult('請輸入有效 Email 與至少 6 碼密碼。');
+    const nextErrors = validateEmailAuthForm(email, password);
+    setEmailAuthErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      setResult('請先修正帳號欄位錯誤後再登入。');
       return;
     }
     try {
@@ -499,7 +506,7 @@ export default function AdminPage() {
       setResult('Email/密碼登入成功。');
     } catch (err) {
       logAction('firebase.loginEmailPassword', 'fail', { reason: err instanceof Error ? err.message : String(err) });
-      setResult(`Email/密碼登入失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+      setResult(`Email/密碼登入失敗：${toReadableAuthError(err)}`);
     }
   };
 
@@ -512,8 +519,10 @@ export default function AdminPage() {
     }
     const email = emailAuthForm.email.trim();
     const password = emailAuthForm.password;
-    if (!email || password.length < 6) {
-      setResult('請輸入有效 Email 與至少 6 碼密碼。');
+    const nextErrors = validateEmailAuthForm(email, password);
+    setEmailAuthErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      setResult('請先修正帳號欄位錯誤後再建立帳號。');
       return;
     }
     try {
@@ -523,7 +532,7 @@ export default function AdminPage() {
       setResult('Email/密碼註冊成功，已自動登入。');
     } catch (err) {
       logAction('firebase.registerEmailPassword', 'fail', { reason: err instanceof Error ? err.message : String(err) });
-      setResult(`Email/密碼註冊失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+      setResult(`Email/密碼註冊失敗：${toReadableAuthError(err)}`);
     }
   };
 
@@ -721,6 +730,52 @@ export default function AdminPage() {
     }
   };
 
+  const validateEmailAuthForm = (emailRaw: string, passwordRaw: string): EmailAuthFormErrors => {
+    const errors: EmailAuthFormErrors = {};
+    if (!emailRaw) {
+      errors.email = '請輸入 Email。';
+    } else {
+      const simpleEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!simpleEmailPattern.test(emailRaw)) {
+        errors.email = 'Email 格式不正確（需包含 @ 與網域）。';
+      }
+    }
+    if (!passwordRaw) {
+      errors.password = '請輸入密碼。';
+    } else if (passwordRaw.length < 6) {
+      errors.password = '密碼至少需要 6 碼。';
+    }
+    return errors;
+  };
+
+  const toReadableAuthError = (err: unknown): string => {
+    if (err instanceof FirebaseError) {
+      switch (err.code) {
+        case 'auth/invalid-email':
+          return 'Email 格式無效，請輸入正確 Email。';
+        case 'auth/email-already-in-use':
+          return '此 Email 已被註冊，請直接登入或改用其他 Email。';
+        case 'auth/weak-password':
+          return '密碼強度不足，請至少使用 6 碼以上。';
+        case 'auth/operation-not-allowed':
+          return 'Firebase 尚未啟用 Email/Password 登入方式。';
+        case 'auth/too-many-requests':
+          return '嘗試次數過多，請稍後再試。';
+        case 'auth/network-request-failed':
+          return '網路連線失敗，請確認網路後再試。';
+        default:
+          return `${err.message}（${err.code}）`;
+      }
+    }
+    return err instanceof Error ? err.message : '未知錯誤';
+  };
+
+  const emailAuthValidationPreview = useMemo(
+    () => validateEmailAuthForm(emailAuthForm.email.trim(), emailAuthForm.password),
+    [emailAuthForm.email, emailAuthForm.password]
+  );
+  const emailAuthHasBlockingError = Object.keys(emailAuthValidationPreview).length > 0;
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
@@ -774,14 +829,14 @@ export default function AdminPage() {
           <button
             className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={loginWithEmailPassword}
-            disabled={!hasFirebaseConfig}
+            disabled={!hasFirebaseConfig || emailAuthHasBlockingError}
           >
             帳密登入
           </button>
           <button
             className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={registerWithEmailPassword}
-            disabled={!hasFirebaseConfig}
+            disabled={!hasFirebaseConfig || emailAuthHasBlockingError}
           >
             建立帳號
           </button>
@@ -849,9 +904,16 @@ export default function AdminPage() {
                 className="w-full rounded border px-2 py-1"
                 type="email"
                 value={emailAuthForm.email}
-                onChange={(e) => setEmailAuthForm((s) => ({ ...s, email: e.target.value }))}
+                onChange={(e) =>
+                  setEmailAuthForm((s) => {
+                    const next = { ...s, email: e.target.value };
+                    setEmailAuthErrors(validateEmailAuthForm(next.email.trim(), next.password));
+                    return next;
+                  })
+                }
                 placeholder="you@example.com"
               />
+              {emailAuthErrors.email && <p className="text-[11px] text-red-600">{emailAuthErrors.email}</p>}
             </label>
             <label className="space-y-1">
               <span>Password（至少 6 碼）</span>
@@ -859,12 +921,20 @@ export default function AdminPage() {
                 className="w-full rounded border px-2 py-1"
                 type="password"
                 value={emailAuthForm.password}
-                onChange={(e) => setEmailAuthForm((s) => ({ ...s, password: e.target.value }))}
+                onChange={(e) =>
+                  setEmailAuthForm((s) => {
+                    const next = { ...s, password: e.target.value };
+                    setEmailAuthErrors(validateEmailAuthForm(next.email.trim(), next.password));
+                    return next;
+                  })
+                }
               />
+              {emailAuthErrors.password && <p className="text-[11px] text-red-600">{emailAuthErrors.password}</p>}
             </label>
             <p className="md:col-span-2 text-slate-500">
               若你所在環境無法使用 Google，請先在 Firebase Authentication 啟用 Email/Password provider，再用此區建立帳號並登入。
             </p>
+            {emailAuthHasBlockingError && <p className="md:col-span-2 text-[11px] text-amber-700">目前帳號欄位尚未通過檢查，請先修正後再登入/建立帳號。</p>}
           </div>
         )}
         <p className="mt-2 text-xs text-slate-500">
