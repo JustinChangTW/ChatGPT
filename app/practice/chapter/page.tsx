@@ -21,6 +21,7 @@ export default function ChapterPracticePage() {
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
   const [progress, setProgress] = useState(loadChapterProgress());
   const [submitted, setSubmitted] = useState(false);
+  const [showProgressBoard, setShowProgressBoard] = useState(false);
   const chapters = useMemo(() => {
     const set = new Set(bank.map((q) => q.chapter));
     return set.size > 0 ? Array.from(set) : fallbackChapters;
@@ -250,7 +251,7 @@ export default function ChapterPracticePage() {
   };
 
   const renderKeywordMixedText = (text: string): ReactNode => {
-    if (!inlineKeywordMode || activeKeywordEntries.length === 0) return text;
+    if (activeKeywordEntries.length === 0) return text;
     const terms = activeKeywordEntries
       .map((entry) => entry.term)
       .filter((x) => x.trim())
@@ -268,8 +269,13 @@ export default function ChapterPracticePage() {
       const original = match[0];
       const mapped = activeKeywordEntries.find((x) => x.term.toLowerCase() === original.toLowerCase());
       fragments.push(
-        <span key={`${match.index}-${original}`} className="rounded bg-amber-100 px-1 font-semibold text-amber-800">
-          {mapped?.translation ?? original}
+        <span
+          key={`${match.index}-${original}`}
+          className="underline decoration-amber-500 decoration-2 underline-offset-2"
+          title={mapped?.translation ?? original}
+        >
+          {original}
+          {inlineKeywordMode && mapped?.translation ? <span className="ml-1 text-xs text-amber-700">({mapped.translation})</span> : null}
         </span>
       );
       last = pattern.lastIndex;
@@ -288,49 +294,50 @@ export default function ChapterPracticePage() {
         </select>
         <button className="rounded bg-blue-600 px-4 py-3 text-white" onClick={startPractice}>開始 10 題練習</button>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-base font-semibold">章節進度追蹤</p>
-          <p className="text-xs text-slate-500">以完成率 + 最近分數觀察學習狀態</p>
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">章節進度</p>
+            <p className="text-xs text-slate-500">精簡模式：先看選定章節，詳細再展開</p>
+          </div>
+          <button
+            type="button"
+            className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
+            onClick={() => setShowProgressBoard((v) => !v)}
+          >
+            {showProgressBoard ? '收合詳細' : '展開詳細'}
+          </button>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {chapterProgressCards.map((item) => (
-            <div
-              key={item.chapter}
-              className={`rounded-xl border p-3 transition ${
-                item.chapter === selectedChapter ? 'border-blue-300 bg-blue-50/50 shadow-sm' : 'border-slate-200 bg-slate-50/40'
-              }`}
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <button
-                  type="button"
-                  className="text-left text-sm font-semibold text-slate-800 hover:text-blue-700"
-                  onClick={() => setSelectedChapter(item.chapter)}
-                >
-                  {item.chapter}
-                </button>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${
-                    item.lastScore >= 80
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : item.lastScore >= 60
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  最近 {item.lastScore} 分
-                </span>
+        {chapterProgressCards
+          .filter((item) => item.chapter === selectedChapter)
+          .map((item) => (
+            <div key={item.chapter} className="mt-2 rounded-lg border bg-slate-50 p-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold">{item.chapter}</span>
+                <span>最近 {item.lastScore} 分 · 完成率 {item.completionRate}%</span>
               </div>
-              <div className="mb-1 h-2 w-full overflow-hidden rounded bg-slate-200">
-                <div className="h-full rounded bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${item.completionRate}%` }} />
-              </div>
-              <div className="flex items-center justify-between text-xs text-slate-600">
-                <span>完成 {item.completed}/{item.attempts || 0} 次</span>
-                <span>完成率 {item.completionRate}%</span>
+              <div className="mt-1 h-1.5 overflow-hidden rounded bg-slate-200">
+                <div className="h-full rounded bg-blue-500" style={{ width: `${item.completionRate}%` }} />
               </div>
             </div>
           ))}
-        </div>
+        {showProgressBoard && (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {chapterProgressCards.map((item) => (
+              <button
+                key={item.chapter}
+                type="button"
+                className={`rounded border px-2 py-2 text-left text-xs ${
+                  item.chapter === selectedChapter ? 'border-blue-300 bg-blue-50' : 'bg-white hover:bg-slate-50'
+                }`}
+                onClick={() => setSelectedChapter(item.chapter)}
+              >
+                <p className="font-semibold">{item.chapter}</p>
+                <p className="text-slate-600">完成 {item.completed}/{item.attempts || 0} · {item.completionRate}%</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {current && !submitted ? (

@@ -149,9 +149,12 @@ function buildKnowledgeBase(): CCTKnowledgeItem[] {
 
 export const CCT_KNOWLEDGE_BASE: CCTKnowledgeItem[] = buildKnowledgeBase();
 
-export function searchKnowledgeItems(params: { query: string; chapterNo: number | 'all' }): CCTKnowledgeItem[] {
+export function searchKnowledgeItems(
+  params: { query: string; chapterNo: number | 'all' },
+  entries: CCTKnowledgeItem[] = CCT_KNOWLEDGE_BASE
+): CCTKnowledgeItem[] {
   const query = params.query.trim().toLowerCase();
-  return CCT_KNOWLEDGE_BASE.filter((item) => {
+  return entries.filter((item) => {
     const chapterMatched = params.chapterNo === 'all' || item.chapterNo === params.chapterNo;
     if (!chapterMatched) return false;
     if (!query) return true;
@@ -159,10 +162,10 @@ export function searchKnowledgeItems(params: { query: string; chapterNo: number 
   });
 }
 
-export function matchKnowledgeByQuestion(question: Question): CCTKnowledgeItem[] {
+export function matchKnowledgeByQuestion(question: Question, entries: CCTKnowledgeItem[] = CCT_KNOWLEDGE_BASE): CCTKnowledgeItem[] {
   const chapterNo = Number((question.chapter.match(/(\d+)/) ?? [])[1] ?? NaN);
   const normalizedQuestionTags = new Set([...question.tags, ...question.keywords].map((x) => x.trim().toLowerCase()));
-  return CCT_KNOWLEDGE_BASE.filter((item) => {
+  return entries.filter((item) => {
     if (Number.isFinite(chapterNo) && item.chapterNo !== chapterNo) return false;
     return item.tags.some((tag) => normalizedQuestionTags.has(tag.toLowerCase()));
   });

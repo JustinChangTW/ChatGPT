@@ -12,7 +12,7 @@ service cloud.firestore {
     // Shared pool for demo/public mode.
     // Security hardening: require authentication (Google/anonymous) to prevent
     // unauthenticated internet users from overwriting public data.
-    match /publicData/cctShared {
+    match /publicData/{docId} {
       allow read, write: if isSignedIn();
     }
 

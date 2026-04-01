@@ -28,6 +28,8 @@ import {
   saveDictionaryProviders
 } from '@/lib/services/dictionary-provider-config';
 import { AIParamsConfig, loadAIParamsConfig, saveAIParamsConfig } from '@/lib/services/ai-params-config';
+import { CCTKnowledgeItem } from '@/lib/knowledge/cct-knowledge-base';
+import { loadKnowledgeBaseEntries, resetKnowledgeBaseEntries, saveKnowledgeBaseEntries } from '@/lib/services/knowledge-base-storage';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -61,6 +63,10 @@ export default function AdminPage() {
   const [currentHostname, setCurrentHostname] = useState('');
   const [dictionaryProviders, setDictionaryProviders] = useState<DictionaryProviderConfig[]>([]);
   const [aiParams, setAIParams] = useState<AIParamsConfig>(loadAIParamsConfig());
+  const [knowledgeEntries, setKnowledgeEntries] = useState<CCTKnowledgeItem[]>([]);
+  const [selectedKnowledgeId, setSelectedKnowledgeId] = useState<string>('');
+  const [knowledgeSearch, setKnowledgeSearch] = useState('');
+  const [knowledgeJson, setKnowledgeJson] = useState('');
   const [emailAuthForm, setEmailAuthForm] = useState<EmailAuthForm>({ email: '', password: '' });
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
     apiKey: '',
@@ -111,6 +117,9 @@ export default function AdminPage() {
     }
     setDictionaryProviders(loadDictionaryProviders());
     setAIParams(loadAIParamsConfig());
+    const loadedKnowledge = loadKnowledgeBaseEntries();
+    setKnowledgeEntries(loadedKnowledge);
+    setSelectedKnowledgeId(loadedKnowledge[0]?.id ?? '');
 
     if (!auth) {
       setUserLabel('Firebase 未設定');
@@ -313,6 +322,79 @@ export default function AdminPage() {
     setResult('已儲存 AI 參數設定。');
   };
 
+  const filteredKnowledgeEntries = useMemo(() => {
+    const q = knowledgeSearch.trim().toLowerCase();
+    if (!q) return knowledgeEntries;
+    return knowledgeEntries.filter((entry) =>
+      [entry.title, entry.summary, ...entry.tags, ...entry.keyPoints, ...entry.examSignals].join(' ').toLowerCase().includes(q)
+    );
+  }, [knowledgeEntries, knowledgeSearch]);
+
+  const selectedKnowledgeEntry = useMemo(
+    () => knowledgeEntries.find((entry) => entry.id === selectedKnowledgeId) ?? null,
+    [knowledgeEntries, selectedKnowledgeId]
+  );
+
+  const updateSelectedKnowledgeEntry = (
+    patch: Partial<
+      Pick<CCTKnowledgeItem, 'chapterNo' | 'chapterTitle' | 'title' | 'summary' | 'tags' | 'keyPoints' | 'examSignals'>
+    >
+  ) => {
+    if (!selectedKnowledgeEntry) return;
+    setKnowledgeEntries((prev) => prev.map((entry) => (entry.id === selectedKnowledgeEntry.id ? { ...entry, ...patch } : entry)));
+  };
+
+  const saveKnowledgeEntries = () => {
+    const saved = saveKnowledgeBaseEntries(knowledgeEntries);
+    setKnowledgeEntries(saved);
+    setResult(`已儲存知識庫設定（${saved.length} 筆）。`);
+  };
+
+  const addKnowledgeEntry = () => {
+    const id = `custom-kb-${Date.now()}`;
+    const newEntry: CCTKnowledgeItem = {
+      id,
+      chapterNo: 1,
+      chapterTitle: 'Custom Chapter',
+      title: '新知識點',
+      summary: '請填寫摘要',
+      keyPoints: ['重點一'],
+      examSignals: ['考題訊號'],
+      tags: ['chapter-1', 'custom']
+    };
+    setKnowledgeEntries((prev) => [newEntry, ...prev]);
+    setSelectedKnowledgeId(id);
+    setResult('已新增知識點草稿。');
+  };
+
+  const importKnowledgeFromJson = () => {
+    try {
+      const parsed = JSON.parse(knowledgeJson);
+      if (!Array.isArray(parsed)) {
+        setResult('知識庫 JSON 匯入失敗：內容必須是陣列。');
+        return;
+      }
+      const saved = saveKnowledgeBaseEntries(parsed as CCTKnowledgeItem[]);
+      setKnowledgeEntries(saved);
+      setSelectedKnowledgeId(saved[0]?.id ?? '');
+      setResult(`知識庫 JSON 匯入成功，共 ${saved.length} 筆。`);
+    } catch (err) {
+      setResult(`知識庫 JSON 匯入失敗：${err instanceof Error ? err.message : '格式錯誤'}`);
+    }
+  };
+
+  const exportKnowledgeToJson = () => {
+    setKnowledgeJson(JSON.stringify(knowledgeEntries, null, 2));
+    setResult('已匯出目前知識庫 JSON。');
+  };
+
+  const resetKnowledge = () => {
+    const restored = resetKnowledgeBaseEntries();
+    setKnowledgeEntries(restored);
+    setSelectedKnowledgeId(restored[0]?.id ?? '');
+    setResult('已還原預設知識庫。');
+  };
+
   const list = useMemo(
     () =>
       bank.filter(
@@ -505,7 +587,7 @@ export default function AdminPage() {
       logAction('firebase.pushAllData', res.ok ? 'success' : 'fail', res);
       setResult(
         res.ok
-          ? '已將「全部本機資料（題庫/歷史/錯題本/章節進度/單字庫/關鍵字記錄/字典 API 設定/AI 參數）」同步到 Firebase。'
+          ? '已同步到 Firebase（共用資料：題庫/知識庫/單字庫/關鍵字/字典 API/AI 參數；個人資料：歷史/錯題本/章節進度）。'
           : `全量同步失敗：${res.reason}${res.error ? ` | ${res.error}` : ''}`
       );
     } catch (err) {
@@ -515,7 +597,7 @@ export default function AdminPage() {
   };
 
   const allDataPulledSummary = (stats: NonNullable<Awaited<ReturnType<typeof hydrateAllLocalDataFromCloud>>['stats']>) =>
-    `已從 Firebase 拉取全部資料：題庫 ${stats.questionBank}、歷史 ${stats.practiceAttempts}、錯題本 ${stats.wrongNotebook}、章節進度 ${stats.chapterProgress}、單字庫 ${stats.vocabularyBank}、關鍵字記錄 ${stats.customKeywords}、字典 API 設定 ${stats.dictionaryProviders}、AI 參數 ${stats.aiParams ? '有' : '無'}。`;
+    `已從 Firebase 拉取資料：共用（題庫 ${stats.commonQuestionBank}、知識庫 ${stats.commonKnowledgeBase}、單字庫 ${stats.commonVocabularyBank}、關鍵字 ${stats.commonCustomKeywords}、字典API ${stats.commonDictionaryProviders}、AI參數 ${stats.commonAiParams ? '有' : '無'}）；個人（歷史 ${stats.personalPracticeAttempts}、錯題本 ${stats.personalWrongNotebook}、章節進度 ${stats.personalChapterProgress}）。`;
 
   const pullAllCloud = async () => {
     logAction('sync.pullAllData', 'start');
@@ -611,7 +693,7 @@ export default function AdminPage() {
             '全量從 Firebase 拉取',
             !!pullAll.ok,
             pullAll.ok && pullAll.stats
-              ? `成功（題庫${pullAll.stats.questionBank}/歷史${pullAll.stats.practiceAttempts}/錯題本${pullAll.stats.wrongNotebook}/章節${pullAll.stats.chapterProgress}/單字${pullAll.stats.vocabularyBank}/關鍵字${pullAll.stats.customKeywords}/字典API${pullAll.stats.dictionaryProviders}/AI參數${pullAll.stats.aiParams ? '有' : '無'}）`
+              ? `成功（共用：題庫${pullAll.stats.commonQuestionBank}/知識庫${pullAll.stats.commonKnowledgeBase}/單字${pullAll.stats.commonVocabularyBank}；個人：歷史${pullAll.stats.personalPracticeAttempts}/錯題本${pullAll.stats.personalWrongNotebook}/章節${pullAll.stats.personalChapterProgress}）`
               : `${pullAll.reason}${pullAll.error ? ` | ${pullAll.error}` : ''}`
           );
         }
@@ -1036,6 +1118,132 @@ export default function AdminPage() {
         </div>
         {result && <p className="text-sm">{result}</p>}
       </form>
+
+      <div className="rounded border bg-white p-4">
+        <h3 className="text-base font-semibold">C-2. 知識庫維護（可直接編輯 / JSON 匯入匯出）</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          編輯後按「儲存知識庫」會寫入本機；知識庫頁會優先讀取這份資料。也可用 JSON 直接匯入/匯出。
+        </p>
+        <div className="mt-3 grid gap-3 lg:grid-cols-[280px_1fr]">
+          <div className="space-y-2">
+            <input
+              className="w-full rounded border px-2 py-1 text-sm"
+              placeholder="搜尋知識點"
+              value={knowledgeSearch}
+              onChange={(e) => setKnowledgeSearch(e.target.value)}
+            />
+            <div className="max-h-80 space-y-1 overflow-auto rounded border bg-slate-50 p-2 text-xs">
+              {filteredKnowledgeEntries.map((entry) => (
+                <button
+                  type="button"
+                  key={entry.id}
+                  onClick={() => setSelectedKnowledgeId(entry.id)}
+                  className={`w-full rounded px-2 py-1 text-left ${
+                    selectedKnowledgeId === entry.id ? 'bg-slate-900 text-white' : 'hover:bg-slate-200'
+                  }`}
+                >
+                  CH{entry.chapterNo} · {entry.title}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="rounded border px-2 py-1 text-xs" onClick={addKnowledgeEntry}>
+                新增知識點
+              </button>
+              <button type="button" className="rounded border px-2 py-1 text-xs" onClick={saveKnowledgeEntries}>
+                儲存知識庫
+              </button>
+              <button type="button" className="rounded border px-2 py-1 text-xs" onClick={resetKnowledge}>
+                還原預設
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {selectedKnowledgeEntry ? (
+              <div className="grid gap-2 text-xs md:grid-cols-2">
+                <label className="space-y-1">
+                  <span>Chapter No</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    type="number"
+                    value={selectedKnowledgeEntry.chapterNo}
+                    onChange={(e) => updateSelectedKnowledgeEntry({ chapterNo: Number(e.target.value) || 1 })}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span>Chapter Title</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    value={selectedKnowledgeEntry.chapterTitle}
+                    onChange={(e) => updateSelectedKnowledgeEntry({ chapterTitle: e.target.value })}
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span>標題</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    value={selectedKnowledgeEntry.title}
+                    onChange={(e) => updateSelectedKnowledgeEntry({ title: e.target.value })}
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span>摘要</span>
+                  <textarea
+                    className="h-20 w-full rounded border px-2 py-1"
+                    value={selectedKnowledgeEntry.summary}
+                    onChange={(e) => updateSelectedKnowledgeEntry({ summary: e.target.value })}
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span>Tags（逗號分隔）</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    value={selectedKnowledgeEntry.tags.join(', ')}
+                    onChange={(e) => updateSelectedKnowledgeEntry({ tags: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })}
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span>Key Points（每行一項）</span>
+                  <textarea
+                    className="h-20 w-full rounded border px-2 py-1"
+                    value={selectedKnowledgeEntry.keyPoints.join('\n')}
+                    onChange={(e) => updateSelectedKnowledgeEntry({ keyPoints: e.target.value.split('\n').map((x) => x.trim()).filter(Boolean) })}
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span>Exam Signals（每行一項）</span>
+                  <textarea
+                    className="h-20 w-full rounded border px-2 py-1"
+                    value={selectedKnowledgeEntry.examSignals.join('\n')}
+                    onChange={(e) => updateSelectedKnowledgeEntry({ examSignals: e.target.value.split('\n').map((x) => x.trim()).filter(Boolean) })}
+                  />
+                </label>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">請先從左側選擇一筆知識點。</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <p className="text-xs font-semibold">JSON 維護區</p>
+          <textarea
+            className="h-40 w-full rounded border p-2 font-mono text-xs"
+            placeholder="貼上知識庫 JSON 陣列後，點下方匯入。"
+            value={knowledgeJson}
+            onChange={(e) => setKnowledgeJson(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="rounded border px-2 py-1 text-xs" onClick={importKnowledgeFromJson}>
+              從 JSON 匯入
+            </button>
+            <button type="button" className="rounded border px-2 py-1 text-xs" onClick={exportKnowledgeToJson}>
+              匯出 JSON
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div className="rounded border border-dashed bg-slate-50 p-3 text-xs text-slate-700">
         <p className="mb-1 font-semibold">simple-v2-blueprint 格式範例（可直接匯入）</p>

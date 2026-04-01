@@ -9,9 +9,11 @@ import { loadVocabularyBank } from '@/lib/services/vocabulary-storage';
 import { loadDictionaryProviders, saveDictionaryProviders } from '@/lib/services/dictionary-provider-config';
 import { loadCustomKeywords, saveCustomKeywords } from '@/lib/services/custom-keyword-storage';
 import { loadAIParamsConfig, saveAIParamsConfig } from '@/lib/services/ai-params-config';
+import { loadKnowledgeBaseEntries, saveKnowledgeBaseEntries } from '@/lib/services/knowledge-base-storage';
+import { ensureFirebaseUser } from '@/lib/services/firebase-session';
 
-const SHARED_DOC = { collection: 'publicData', id: 'cctShared' } as const;
-type SyncFailReason = 'firebase-not-configured' | 'unknown';
+const SHARED_DOC = { collection: 'publicData', id: 'cctSharedCommon' } as const;
+type SyncFailReason = 'firebase-not-configured' | 'unknown' | 'user-not-signed-in';
 
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -30,22 +32,39 @@ export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?:
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
 
   try {
-    const appData = stripUndefined({
+    const session = await ensureFirebaseUser();
+    if (!session.ok) return { ok: false, reason: 'user-not-signed-in', error: session.error };
+
+    const commonData = stripUndefined({
       questionBank: loadQuestionBank(),
-      practiceAttempts: loadPracticeAttempts(),
-      wrongNotebook: loadWrongNotebook(),
-      chapterProgress: loadChapterProgress(),
       vocabularyBank: loadVocabularyBank(),
       dictionaryProviders: loadDictionaryProviders(),
       customKeywords: loadCustomKeywords(),
+      knowledgeBase: loadKnowledgeBaseEntries(),
       aiParams: loadAIParamsConfig(),
-      updatedAt: serverTimestamp(),
-      version: 1
+      updatedAt: serverTimestamp()
+    });
+    const personalData = stripUndefined({
+      practiceAttempts: loadPracticeAttempts(),
+      wrongNotebook: loadWrongNotebook(),
+      chapterProgress: loadChapterProgress(),
+      updatedAt: serverTimestamp()
     });
     await setDoc(
       doc(db, SHARED_DOC.collection, SHARED_DOC.id),
       {
-        appData
+        commonData,
+        version: 2,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+    await setDoc(
+      doc(db, 'users', session.uid),
+      {
+        personalData,
+        personalVersion: 2,
+        personalUpdatedAt: serverTimestamp()
       },
       { merge: true }
     );
@@ -61,6 +80,15 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
   reason?: SyncFailReason | 'no-cloud-data' | 'cloud-read-failed';
   error?: string;
   stats?: {
+    commonQuestionBank: number;
+    commonVocabularyBank: number;
+    commonCustomKeywords: number;
+    commonDictionaryProviders: number;
+    commonKnowledgeBase: number;
+    commonAiParams: boolean;
+    personalPracticeAttempts: number;
+    personalWrongNotebook: number;
+    personalChapterProgress: number;
     questionBank: number;
     practiceAttempts: number;
     wrongNotebook: number;
@@ -74,33 +102,52 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
   if (!db) return { ok: false, reason: 'firebase-not-configured' };
 
   try {
-    const snap = await getDoc(doc(db, SHARED_DOC.collection, SHARED_DOC.id));
-    const data = snap.data()?.appData;
-    if (!data) return { ok: false, reason: 'no-cloud-data' };
+    const session = await ensureFirebaseUser();
+    if (!session.ok) return { ok: false, reason: 'user-not-signed-in', error: session.error };
 
-    if (Array.isArray(data.questionBank)) saveQuestionBank(data.questionBank);
-    if (Array.isArray(data.practiceAttempts)) replacePracticeAttempts(data.practiceAttempts);
-    if (Array.isArray(data.wrongNotebook)) saveWrongNotebook(data.wrongNotebook);
-    if (Array.isArray(data.chapterProgress)) saveChapterProgress(data.chapterProgress);
-    if (Array.isArray(data.vocabularyBank)) {
+    const [commonSnap, personalSnap] = await Promise.all([
+      getDoc(doc(db, SHARED_DOC.collection, SHARED_DOC.id)),
+      getDoc(doc(db, 'users', session.uid))
+    ]);
+    const commonData = commonSnap.data()?.commonData;
+    const personalData = personalSnap.data()?.personalData;
+    if (!commonData && !personalData) return { ok: false, reason: 'no-cloud-data' };
+
+    if (Array.isArray(commonData?.questionBank)) saveQuestionBank(commonData.questionBank);
+    if (Array.isArray(personalData?.practiceAttempts)) replacePracticeAttempts(personalData.practiceAttempts);
+    if (Array.isArray(personalData?.wrongNotebook)) saveWrongNotebook(personalData.wrongNotebook);
+    if (Array.isArray(personalData?.chapterProgress)) saveChapterProgress(personalData.chapterProgress);
+    if (Array.isArray(commonData?.vocabularyBank)) {
       // keep write path centralized in existing service via direct localStorage entry
-      window.localStorage.setItem('cct_vocabulary_bank_v1', JSON.stringify(data.vocabularyBank));
+      window.localStorage.setItem('cct_vocabulary_bank_v1', JSON.stringify(commonData.vocabularyBank));
     }
-    if (Array.isArray(data.dictionaryProviders)) saveDictionaryProviders(data.dictionaryProviders);
-    if (data.customKeywords && typeof data.customKeywords === 'object') saveCustomKeywords(data.customKeywords);
-    if (data.aiParams && typeof data.aiParams === 'object') saveAIParamsConfig(data.aiParams);
+    if (Array.isArray(commonData?.dictionaryProviders)) saveDictionaryProviders(commonData.dictionaryProviders);
+    if (commonData?.customKeywords && typeof commonData.customKeywords === 'object') saveCustomKeywords(commonData.customKeywords);
+    if (Array.isArray(commonData?.knowledgeBase)) saveKnowledgeBaseEntries(commonData.knowledgeBase);
+    if (commonData?.aiParams && typeof commonData.aiParams === 'object') saveAIParamsConfig(commonData.aiParams);
 
     return {
       ok: true,
       stats: {
-        questionBank: Array.isArray(data.questionBank) ? data.questionBank.length : 0,
-        practiceAttempts: Array.isArray(data.practiceAttempts) ? data.practiceAttempts.length : 0,
-        wrongNotebook: Array.isArray(data.wrongNotebook) ? data.wrongNotebook.length : 0,
-        chapterProgress: Array.isArray(data.chapterProgress) ? data.chapterProgress.length : 0,
-        vocabularyBank: Array.isArray(data.vocabularyBank) ? data.vocabularyBank.length : 0,
-        customKeywords: data.customKeywords && typeof data.customKeywords === 'object' ? Object.keys(data.customKeywords).length : 0,
-        dictionaryProviders: Array.isArray(data.dictionaryProviders) ? data.dictionaryProviders.length : 0,
-        aiParams: !!(data.aiParams && typeof data.aiParams === 'object')
+        commonQuestionBank: Array.isArray(commonData?.questionBank) ? commonData.questionBank.length : 0,
+        commonVocabularyBank: Array.isArray(commonData?.vocabularyBank) ? commonData.vocabularyBank.length : 0,
+        commonCustomKeywords:
+          commonData?.customKeywords && typeof commonData.customKeywords === 'object' ? Object.keys(commonData.customKeywords).length : 0,
+        commonDictionaryProviders: Array.isArray(commonData?.dictionaryProviders) ? commonData.dictionaryProviders.length : 0,
+        commonKnowledgeBase: Array.isArray(commonData?.knowledgeBase) ? commonData.knowledgeBase.length : 0,
+        commonAiParams: !!(commonData?.aiParams && typeof commonData.aiParams === 'object'),
+        personalPracticeAttempts: Array.isArray(personalData?.practiceAttempts) ? personalData.practiceAttempts.length : 0,
+        personalWrongNotebook: Array.isArray(personalData?.wrongNotebook) ? personalData.wrongNotebook.length : 0,
+        personalChapterProgress: Array.isArray(personalData?.chapterProgress) ? personalData.chapterProgress.length : 0,
+        questionBank: Array.isArray(commonData?.questionBank) ? commonData.questionBank.length : 0,
+        practiceAttempts: Array.isArray(personalData?.practiceAttempts) ? personalData.practiceAttempts.length : 0,
+        wrongNotebook: Array.isArray(personalData?.wrongNotebook) ? personalData.wrongNotebook.length : 0,
+        chapterProgress: Array.isArray(personalData?.chapterProgress) ? personalData.chapterProgress.length : 0,
+        vocabularyBank: Array.isArray(commonData?.vocabularyBank) ? commonData.vocabularyBank.length : 0,
+        customKeywords:
+          commonData?.customKeywords && typeof commonData.customKeywords === 'object' ? Object.keys(commonData.customKeywords).length : 0,
+        dictionaryProviders: Array.isArray(commonData?.dictionaryProviders) ? commonData.dictionaryProviders.length : 0,
+        aiParams: !!(commonData?.aiParams && typeof commonData.aiParams === 'object')
       }
     };
   } catch (err) {

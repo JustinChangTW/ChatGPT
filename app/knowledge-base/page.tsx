@@ -2,38 +2,40 @@
 
 import { useMemo, useState } from 'react';
 import { loadQuestionBank } from '@/lib/services/local-question-bank';
-import { CCT_KNOWLEDGE_BASE, matchKnowledgeByQuestion, searchKnowledgeItems } from '@/lib/knowledge/cct-knowledge-base';
+import { matchKnowledgeByQuestion, searchKnowledgeItems } from '@/lib/knowledge/cct-knowledge-base';
+import { loadKnowledgeBaseEntries } from '@/lib/services/knowledge-base-storage';
 
 export default function KnowledgeBasePage() {
   const [query, setQuery] = useState('');
   const [chapterFilter, setChapterFilter] = useState<number | 'all'>('all');
   const questionBank = useMemo(() => loadQuestionBank(), []);
+  const knowledgeSource = useMemo(() => loadKnowledgeBaseEntries(), []);
 
   const knowledgeItems = useMemo(
     () =>
       searchKnowledgeItems({
         query,
         chapterNo: chapterFilter
-      }),
-    [query, chapterFilter]
+      }, knowledgeSource),
+    [query, chapterFilter, knowledgeSource]
   );
 
   const questionMappedCounts = useMemo(() => {
     const counts = new Map<string, number>();
     questionBank.forEach((q) => {
-      const mapped = matchKnowledgeByQuestion(q);
+      const mapped = matchKnowledgeByQuestion(q, knowledgeSource);
       mapped.forEach((item) => counts.set(item.id, (counts.get(item.id) ?? 0) + 1));
     });
     return counts;
-  }, [questionBank]);
+  }, [questionBank, knowledgeSource]);
 
-  const chapters = useMemo(() => Array.from(new Set(CCT_KNOWLEDGE_BASE.map((x) => x.chapterNo))).sort((a, b) => a - b), []);
+  const chapters = useMemo(() => Array.from(new Set(knowledgeSource.map((x) => x.chapterNo))).sort((a, b) => a - b), [knowledgeSource]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">C|CT 知識庫（依章節）</h1>
       <p className="text-sm text-slate-600">
-        已建立 {CCT_KNOWLEDGE_BASE.length} 筆知識點（對應 161 題配置），可依章節與關鍵字搜尋，並顯示每個知識點目前可對應到的題庫題數（用 tags/keywords 比對）。
+        已建立 {knowledgeSource.length} 筆知識點（預設對應 161 題配置），可依章節與關鍵字搜尋，並顯示每個知識點目前可對應到的題庫題數（用 tags/keywords 比對）。
       </p>
 
       <div className="grid gap-2 rounded border bg-white p-3 text-sm md:grid-cols-3">
