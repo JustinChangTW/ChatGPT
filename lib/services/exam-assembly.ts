@@ -14,7 +14,6 @@ export const EXAM_BLUEPRINT = [
 
 const TOTAL = 60;
 const THEORY_TOTAL = 50;
-const PRACTICAL_TOTAL = 10;
 
 export function allocateByWeight(total: number, weights: number[]): number[] {
   const raw = weights.map((w) => (w / 100) * total);

@@ -60,6 +60,7 @@ export default function AdminPage() {
   const [showFirebaseSettings, setShowFirebaseSettings] = useState(false);
   const [isQuickChecking, setIsQuickChecking] = useState(false);
   const [activeAdminTab, setActiveAdminTab] = useState<'sync' | 'api' | 'bank'>('sync');
+  const [activeDataTab, setActiveDataTab] = useState<'question' | 'knowledge'>('question');
   const [currentHostname, setCurrentHostname] = useState('');
   const [dictionaryProviders, setDictionaryProviders] = useState<DictionaryProviderConfig[]>([]);
   const [aiParams, setAIParams] = useState<AIParamsConfig>(loadAIParamsConfig());
@@ -370,14 +371,25 @@ export default function AdminPage() {
   const importKnowledgeFromJson = () => {
     try {
       const parsed = JSON.parse(knowledgeJson);
-      if (!Array.isArray(parsed)) {
-        setResult('知識庫 JSON 匯入失敗：內容必須是陣列。');
+      const normalized = Array.isArray(parsed) ? parsed : [parsed];
+      if (normalized.length === 0) {
+        setResult('知識庫 JSON 匯入失敗：內容不可為空。');
         return;
       }
-      const saved = saveKnowledgeBaseEntries(parsed as CCTKnowledgeItem[]);
+
+      const imported = normalized as CCTKnowledgeItem[];
+      const mergedMap = new Map(knowledgeEntries.map((entry) => [entry.id, entry]));
+      let overwritten = 0;
+      imported.forEach((entry) => {
+        if (mergedMap.has(entry.id)) overwritten += 1;
+        mergedMap.set(entry.id, entry);
+      });
+      const saved = saveKnowledgeBaseEntries(Array.from(mergedMap.values()));
       setKnowledgeEntries(saved);
       setSelectedKnowledgeId(saved[0]?.id ?? '');
-      setResult(`知識庫 JSON 匯入成功，共 ${saved.length} 筆。`);
+      setResult(
+        `知識庫 JSON 匯入成功：新增 ${imported.length - overwritten} 筆、覆蓋 ${overwritten} 筆（以 id 判定重覆），目前共 ${saved.length} 筆。`
+      );
     } catch (err) {
       setResult(`知識庫 JSON 匯入失敗：${err instanceof Error ? err.message : '格式錯誤'}`);
     }
@@ -1067,6 +1079,31 @@ export default function AdminPage() {
       {activeAdminTab === 'bank' && (
         <>
       <h2 className="text-lg font-semibold">C. 題庫匯入與資料管理</h2>
+      <div className="rounded-xl border bg-white p-2">
+        <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setActiveDataTab('question')}
+            className={`rounded-lg px-3 py-2 text-left transition ${
+              activeDataTab === 'question' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            題庫匯入 / 題目列表
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDataTab('knowledge')}
+            className={`rounded-lg px-3 py-2 text-left transition ${
+              activeDataTab === 'knowledge' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            知識庫維護 / JSON 匯入
+          </button>
+        </div>
+      </div>
+
+      {activeDataTab === 'question' && (
+        <>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-2 rounded border bg-white p-4">
         <div
           className={`rounded border-2 border-dashed p-4 text-center text-sm ${
@@ -1118,7 +1155,10 @@ export default function AdminPage() {
         </div>
         {result && <p className="text-sm">{result}</p>}
       </form>
+        </>
+      )}
 
+      {activeDataTab === 'knowledge' && (
       <div className="rounded border bg-white p-4">
         <h3 className="text-base font-semibold">C-2. 知識庫維護（可直接編輯 / JSON 匯入匯出）</h3>
         <p className="mt-1 text-xs text-slate-500">
@@ -1233,9 +1273,10 @@ export default function AdminPage() {
 
         <div className="mt-4 space-y-2">
           <p className="text-xs font-semibold">JSON 維護區</p>
+          <p className="text-xs text-slate-500">若匯入資料的 id 與既有重覆，會以匯入內容覆蓋既有資料（upsert）。</p>
           <textarea
             className="h-40 w-full rounded border p-2 font-mono text-xs"
-            placeholder="貼上知識庫 JSON 陣列後，點下方匯入。"
+            placeholder="貼上知識庫 JSON（可單筆物件或陣列）後，點下方匯入。"
             value={knowledgeJson}
             onChange={(e) => setKnowledgeJson(e.target.value)}
           />
@@ -1249,7 +1290,10 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+      )}
 
+      {activeDataTab === 'question' && (
+        <>
       <div className="rounded border border-dashed bg-slate-50 p-3 text-xs text-slate-700">
         <p className="mb-1 font-semibold">simple-v2-blueprint 格式範例（可直接匯入）</p>
         <pre className="overflow-auto whitespace-pre-wrap">{`{
@@ -1351,28 +1395,45 @@ export default function AdminPage() {
       </div>
         </>
       )}
+        </>
+      )}
 
+      {activeDataTab === 'question' && (
       <div className="rounded border bg-white p-4 text-sm">
-        <p className="mb-2 font-semibold">題目列表（{list.length}）</p>
-        <ul className="space-y-1 break-words">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="font-semibold">題目列表（{list.length}）</p>
+          <p className="text-xs text-slate-500">改為卡片資訊層級：題號/章節/Domain/Subdomain/型態</p>
+        </div>
+        <ul className="space-y-2">
           {list.map((q) => (
-            <li key={q.id} className="rounded border border-slate-100 bg-slate-50 p-2">
+            <li key={q.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               {(() => {
                 const meta = parseImportMeta(q);
+                const domainCode = meta.domainCode ?? String(parseChapterNo(q.chapter) ?? domainNoByName(q.domain) ?? '-');
                 return (
-                  <>
-                    {q.id}
-                    {meta.questionNo ? ` | Q${meta.questionNo}` : ''} | {chapterLabel(q.chapter)} | [D
-                    {meta.domainCode ?? parseChapterNo(q.chapter) ?? domainNoByName(q.domain) ?? '-'}] {q.domain} |
-                    {meta.subdomainCode ? ` [S${meta.subdomainCode}]` : ''} {q.subdomain} | {q.questionType} | {q.sourceType}
-                    {meta.classificationConfidence ? ` | confidence:${meta.classificationConfidence}` : ''}
-                  </>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-slate-900 px-2 py-0.5 text-xs text-white">{meta.questionNo ? `Q${meta.questionNo}` : q.id}</span>
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700">{chapterLabel(q.chapter)}</span>
+                      <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">D{domainCode}</span>
+                      {meta.subdomainCode ? <span className="rounded bg-cyan-100 px-2 py-0.5 text-xs text-cyan-700">S{meta.subdomainCode}</span> : null}
+                      <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">{q.questionType}</span>
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">{q.sourceType}</span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-800">{q.domain}</p>
+                    <p className="text-sm text-slate-600">{q.subdomain}</p>
+                    <p className="truncate text-xs text-slate-500">{q.id}</p>
+                    {meta.classificationConfidence ? (
+                      <p className="text-xs text-slate-500">confidence: {meta.classificationConfidence}</p>
+                    ) : null}
+                  </div>
                 );
               })()}
             </li>
           ))}
         </ul>
       </div>
+      )}
     </div>
   );
 }
