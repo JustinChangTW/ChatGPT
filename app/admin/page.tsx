@@ -1124,6 +1124,11 @@ export default function AdminPage() {
         <p className="mt-1 text-xs text-slate-500">
           編輯後按「儲存知識庫」會寫入本機；知識庫頁會優先讀取這份資料。也可用 JSON 直接匯入/匯出。
         </p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-slate-600">
+          <li>左側先搜尋/選一筆知識點。</li>
+          <li>右側直接改欄位（章節、標題、摘要、tags、重點、考題訊號）。</li>
+          <li>按「儲存知識庫」生效；要批次維護可用下方 JSON 匯入/匯出。</li>
+        </ol>
         <div className="mt-3 grid gap-3 lg:grid-cols-[280px_1fr]">
           <div className="space-y-2">
             <input

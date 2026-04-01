@@ -21,7 +21,6 @@ export default function ChapterPracticePage() {
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
   const [progress, setProgress] = useState(loadChapterProgress());
   const [submitted, setSubmitted] = useState(false);
-  const [showProgressBoard, setShowProgressBoard] = useState(false);
   const chapters = useMemo(() => {
     const set = new Set(bank.map((q) => q.chapter));
     return set.size > 0 ? Array.from(set) : fallbackChapters;
@@ -89,6 +88,10 @@ export default function ChapterPracticePage() {
         return { chapter: ch, attempts, completed, completionRate, lastScore };
       }),
     [chapters, progress]
+  );
+  const selectedChapterProgress = useMemo(
+    () => chapterProgressCards.find((x) => x.chapter === selectedChapter) ?? null,
+    [chapterProgressCards, selectedChapter]
   );
 
   const suggestedEntries = useMemo(() => {
@@ -288,56 +291,50 @@ export default function ChapterPracticePage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Chapter Practice</h1>
       <p className="text-sm text-slate-500">目前本機題庫：{bank.length} 題（含 Admin 匯入）</p>
-      <div className="grid gap-2 sm:flex">
-        <select className="w-full rounded border px-3 py-3 sm:w-auto" value={selectedChapter} onChange={(e) => setSelectedChapter(e.target.value)}>
-          {chapters.map((ch) => <option key={ch}>{ch}</option>)}
-        </select>
-        <button className="rounded bg-blue-600 px-4 py-3 text-white" onClick={startPractice}>開始 10 題練習</button>
+      <div className="grid gap-2 sm:flex sm:items-center">
+        <div className="rounded-lg border bg-white px-3 py-2 text-sm">
+          目前章節：<span className="font-semibold">{selectedChapter}</span>
+          {selectedChapterProgress ? (
+            <span className="ml-2 text-slate-500">
+              （完成率 {selectedChapterProgress.completionRate}% · 最近 {selectedChapterProgress.lastScore} 分）
+            </span>
+          ) : null}
+        </div>
+        <button className="rounded bg-blue-600 px-4 py-3 text-white" onClick={startPractice}>開始 10 題練習（{selectedChapter}）</button>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold">章節進度</p>
-            <p className="text-xs text-slate-500">精簡模式：先看選定章節，詳細再展開</p>
-          </div>
-          <button
-            type="button"
-            className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
-            onClick={() => setShowProgressBoard((v) => !v)}
-          >
-            {showProgressBoard ? '收合詳細' : '展開詳細'}
-          </button>
+        <div>
+          <p className="text-sm font-semibold">章節進度總覽（點任一章可切換練習章節）</p>
+          <p className="text-xs text-slate-500">桌機一排最多 6 個，手機會自動換行（RWD）。</p>
         </div>
-        {chapterProgressCards
-          .filter((item) => item.chapter === selectedChapter)
-          .map((item) => (
-            <div key={item.chapter} className="mt-2 rounded-lg border bg-slate-50 p-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold">{item.chapter}</span>
-                <span>最近 {item.lastScore} 分 · 完成率 {item.completionRate}%</span>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {chapterProgressCards.map((item) => (
+            <button
+              key={item.chapter}
+              type="button"
+              onClick={() => setSelectedChapter(item.chapter)}
+              className={`rounded-xl border p-2 text-left transition ${
+                item.chapter === selectedChapter ? 'border-blue-400 bg-blue-50 shadow-sm' : 'bg-slate-50 hover:bg-slate-100'
+              }`}
+            >
+              <p className="truncate text-xs font-semibold">{item.chapter}</p>
+              <div className="mt-2 flex items-center gap-2">
+                <div
+                  className="grid h-10 w-10 place-items-center rounded-full text-[10px] font-semibold text-slate-700"
+                  style={{
+                    background: `conic-gradient(#2563eb ${item.completionRate}%, #e2e8f0 0%)`
+                  }}
+                >
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-white">{item.completionRate}%</span>
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  <p>最近 {item.lastScore} 分</p>
+                  <p>完成 {item.completed}/{item.attempts || 0}</p>
+                </div>
               </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded bg-slate-200">
-                <div className="h-full rounded bg-blue-500" style={{ width: `${item.completionRate}%` }} />
-              </div>
-            </div>
+            </button>
           ))}
-        {showProgressBoard && (
-          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {chapterProgressCards.map((item) => (
-              <button
-                key={item.chapter}
-                type="button"
-                className={`rounded border px-2 py-2 text-left text-xs ${
-                  item.chapter === selectedChapter ? 'border-blue-300 bg-blue-50' : 'bg-white hover:bg-slate-50'
-                }`}
-                onClick={() => setSelectedChapter(item.chapter)}
-              >
-                <p className="font-semibold">{item.chapter}</p>
-                <p className="text-slate-600">完成 {item.completed}/{item.attempts || 0} · {item.completionRate}%</p>
-              </button>
-            ))}
-          </div>
-        )}
+        </div>
       </div>
 
       {current && !submitted ? (
