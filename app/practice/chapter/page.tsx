@@ -38,8 +38,12 @@ export default function ChapterPracticePage() {
   const [wordHint, setWordHint] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [inlineKeywordMode, setInlineKeywordMode] = useState(false);
+  const [practiceMode, setPracticeMode] = useState<'single' | 'list'>('single');
   const [customKeywordsByQuestion, setCustomKeywordsByQuestion] = useState<Record<string, DictionaryEntry[]>>({});
+  const [notesByQuestion, setNotesByQuestion] = useState<Record<string, string>>({});
+  const [showNotePreview, setShowNotePreview] = useState(false);
   const questionPanelRef = useRef<HTMLDivElement | null>(null);
+  const noteEditorRef = useRef<HTMLTextAreaElement | null>(null);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
   const { questions, currentIndex, answers, setSession, setAnswer, setCurrentIndex, next, prev, reset } = usePracticeStore();
 
@@ -287,6 +291,49 @@ export default function ChapterPracticePage() {
     return fragments;
   };
 
+  const currentNote = current ? notesByQuestion[current.id] ?? '' : '';
+  const updateCurrentNote = (content: string) => {
+    if (!current) return;
+    setNotesByQuestion((prev) => ({ ...prev, [current.id]: content }));
+  };
+
+  const applyMarkdownSyntax = (syntax: 'bold' | 'h2' | 'bullet' | 'code') => {
+    const textarea = noteEditorRef.current;
+    if (!textarea || !current) return;
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const text = currentNote;
+    const selected = text.slice(start, end);
+    let replacement = selected;
+    if (syntax === 'bold') replacement = `**${selected || '重點'}**`;
+    if (syntax === 'h2') replacement = `## ${selected || '標題'}`;
+    if (syntax === 'bullet') replacement = `- ${selected || '列點內容'}`;
+    if (syntax === 'code') replacement = `\`${selected || '關鍵詞'}\``;
+    const next = `${text.slice(0, start)}${replacement}${text.slice(end)}`;
+    updateCurrentNote(next);
+    window.setTimeout(() => {
+      const pos = start + replacement.length;
+      textarea.focus();
+      textarea.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
+  const renderMarkdownPreview = (markdown: string): ReactNode => {
+    const lines = markdown.split('\n');
+    return (
+      <div className="space-y-1 text-sm">
+        {lines.map((line, idx) => {
+          if (line.startsWith('## ')) return <h4 key={idx} className="font-semibold">{line.replace(/^## /, '')}</h4>;
+          if (line.startsWith('- ')) return <li key={idx} className="ml-5 list-disc">{line.replace(/^- /, '')}</li>;
+          const inline = line
+            .replace(/`([^`]+)`/g, '<code class="rounded bg-slate-100 px-1">$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+          return <p key={idx} dangerouslySetInnerHTML={{ __html: inline || '&nbsp;' }} />;
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Chapter Practice</h1>
@@ -301,6 +348,25 @@ export default function ChapterPracticePage() {
           ) : null}
         </div>
         <button className="rounded bg-blue-600 px-4 py-3 text-white" onClick={startPractice}>開始 10 題練習（{selectedChapter}）</button>
+      </div>
+      <div className="rounded-lg border bg-white p-3 text-sm">
+        <p className="font-semibold">作答模式</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setPracticeMode('single')}
+            className={`rounded px-3 py-1.5 ${practiceMode === 'single' ? 'bg-slate-900 text-white' : 'border bg-white'}`}
+          >
+            逐題模式（專注作答）
+          </button>
+          <button
+            type="button"
+            onClick={() => setPracticeMode('list')}
+            className={`rounded px-3 py-1.5 ${practiceMode === 'list' ? 'bg-slate-900 text-white' : 'border bg-white'}`}
+          >
+            清單模式（一次看全部）
+          </button>
+        </div>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
         <div>
@@ -337,36 +403,30 @@ export default function ChapterPracticePage() {
         </div>
       </div>
 
-      {current && !submitted ? (
+      {current && !submitted && practiceMode === 'single' ? (
         <div ref={questionPanelRef} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
           <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{renderKeywordMixedText(current.stem)}</h2>
-          <p className="mb-3 text-xs text-slate-500">可直接反白英文單字/片語後，點「翻譯選取文字」。</p>
-          <div className="mb-3">
-            <button
-              type="button"
-              className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
-              onClick={() => setInlineKeywordMode((v) => !v)}
-            >
-              {inlineKeywordMode ? '切回原文顯示' : '關鍵字中英混合顯示'}
-            </button>
-            <p className="mt-1 text-xs text-slate-500">
-              目前模式：{inlineKeywordMode ? '中英混合（關鍵字以中文呈現）' : '原文英文'}
-            </p>
-          </div>
-          {(activeKeywordEntries.length > 0 || current) && (
-            <div className="mb-3">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <p className="text-xs text-slate-500">建議關鍵字：</p>
-                <button
-                  type="button"
-                  className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100"
-                  onClick={addAllSuggestedTerms}
-                >
-                  全部加入字庫
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1">
+          <p className="mb-3 text-xs text-slate-500">可直接反白英文單字/片語後，使用下方「學習工具面板」。</p>
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold text-slate-700">學習工具面板（關鍵字 / 字典 / 翻譯）</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={() => void translateSelectedText(current.id)}>
+                翻譯選取文字
+              </button>
+              <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={() => void translateSelectedText(current.id, true)}>
+                翻譯並加入關鍵字
+              </button>
+              <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={addAllSuggestedTerms}>
+                建議關鍵字全加到字庫
+              </button>
+              <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={() => setInlineKeywordMode((v) => !v)}>
+                {inlineKeywordMode ? '切回原文顯示' : '中英混合顯示'}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">目前模式：{inlineKeywordMode ? '中英混合（關鍵字含中文）' : '原文英文'}</p>
+            {activeKeywordEntries.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
                 {activeKeywordEntries.map((entry) => (
                   <button
                     key={entry.term}
@@ -381,24 +441,8 @@ export default function ChapterPracticePage() {
                   </button>
                 ))}
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
-                  onClick={() => void translateSelectedText(current.id, true)}
-                >
-                  翻譯選取文字並加入關鍵字
-                </button>
-              </div>
-            </div>
-          )}
-          <button
-            type="button"
-            className="mb-4 rounded border border-slate-300 bg-white px-2 py-1 text-xs hover:bg-slate-50"
-            onClick={() => void translateSelectedText(current.id)}
-          >
-            翻譯選取文字
-          </button>
+            )}
+          </div>
           {isTranslating && <p className="mb-3 text-xs text-slate-500">翻譯中…</p>}
           {selectedWord && (
             <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
@@ -427,6 +471,31 @@ export default function ChapterPracticePage() {
               {wordHint && <p className="mt-1 text-xs text-emerald-700">{wordHint}</p>}
             </div>
           )}
+          <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-indigo-900">本題筆記（Markdown）</p>
+              <button type="button" className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs" onClick={() => setShowNotePreview((v) => !v)}>
+                {showNotePreview ? '回到編輯' : '預覽'}
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('h2')}>H2</button>
+              <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bold')}>粗體</button>
+              <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bullet')}>清單</button>
+              <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('code')}>Code</button>
+            </div>
+            {!showNotePreview ? (
+              <textarea
+                ref={noteEditorRef}
+                className="mt-2 min-h-28 w-full rounded border bg-white p-2 text-sm"
+                placeholder="可用 Markdown：## 標題、**粗體**、- 清單、`code`"
+                value={currentNote}
+                onChange={(e) => updateCurrentNote(e.target.value)}
+              />
+            ) : (
+              <div className="mt-2 min-h-28 rounded border bg-white p-2">{renderMarkdownPreview(currentNote)}</div>
+            )}
+          </div>
           <div className="space-y-2">
             {current.options.map((opt) => (
               <label
@@ -471,6 +540,48 @@ export default function ChapterPracticePage() {
                 );
               })}
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {questions.length > 0 && !submitted && practiceMode === 'list' ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-sm text-slate-600">清單模式：一次查看全部題目，點題號可快速跳到逐題模式該題。</p>
+          <div className="space-y-3">
+            {questions.map((q, idx) => (
+              <div key={q.id} className="rounded border p-3">
+                <p className="text-sm font-semibold">第 {idx + 1} 題</p>
+                <p className="mt-1 whitespace-pre-line">{q.stem}</p>
+                <div className="mt-2 space-y-1">
+                  {q.options.map((opt) => (
+                    <label key={opt.key} className="block text-sm">
+                      <input
+                        type="radio"
+                        className="mr-2"
+                        name={q.id}
+                        checked={answers[q.id] === opt.key}
+                        onChange={() => setAnswer(q.id, opt.key)}
+                      />
+                      {opt.key}. {opt.text}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="mt-2 rounded border px-2 py-1 text-xs"
+                  onClick={() => {
+                    setCurrentIndex(idx);
+                    setPracticeMode('single');
+                  }}
+                >
+                  切到逐題模式編輯本題筆記
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button className="rounded bg-emerald-600 px-3 py-2 text-white" onClick={submitPractice}>交卷看結果</button>
+            <p className="self-center text-sm text-slate-500">已作答 {answeredCount}/{questions.length}</p>
           </div>
         </div>
       ) : null}

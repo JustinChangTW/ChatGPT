@@ -1056,7 +1056,7 @@ export default function AdminPage() {
         <div className="mt-4 rounded border bg-slate-50 p-3">
           <h3 className="text-sm font-semibold">B-2. AI 參數設定</h3>
           <p className="mt-1 text-xs text-slate-500">
-            可在 Admin 設定 AI 參數（模型、溫度、Top P、Max Tokens、語系、翻譯 API URL）。
+            可在 Admin 設定 AI 參數（翻譯與 AI 助教：模型、提示詞、溫度、Token、Endpoint、API Key）。
           </p>
           <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
             <label className="space-y-1">
@@ -1135,6 +1135,130 @@ export default function AdminPage() {
                 onChange={(e) => setAIParams((prev) => ({ ...prev, translationEndpoint: e.target.value }))}
               />
             </label>
+            <div className="md:col-span-2 mt-2 rounded border bg-white p-3">
+              <p className="font-semibold">AI 助教（錯題本追問）</p>
+              <p className="mt-1 text-slate-500">若未啟用或 API Key 為空，錯題本會自動使用離線助教回覆。</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span>啟用 AI 助教</span>
+                  <input
+                    type="checkbox"
+                    checked={aiParams.tutorEnabled}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorEnabled: e.target.checked }))}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span>Provider</span>
+                  <select
+                    className="w-full rounded border px-2 py-1"
+                    value={aiParams.tutorProvider}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorProvider: e.target.value as AIParamsConfig['tutorProvider'] }))}
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic Claude</option>
+                    <option value="google_gemini">Google Gemini</option>
+                    <option value="azure_openai">Azure OpenAI</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="custom_openai_compatible">Custom (OpenAI Compatible)</option>
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span>助教模型</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    value={aiParams.tutorModel}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorModel: e.target.value }))}
+                    placeholder="gpt-4o-mini"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span>API Endpoint</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    value={aiParams.tutorEndpoint}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorEndpoint: e.target.value }))}
+                    placeholder={
+                      aiParams.tutorProvider === 'google_gemini'
+                        ? 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}'
+                        : aiParams.tutorProvider === 'anthropic'
+                          ? 'https://api.anthropic.com/v1/messages'
+                          : aiParams.tutorProvider === 'azure_openai'
+                            ? 'https://{resource}.openai.azure.com'
+                            : 'https://api.openai.com/v1/chat/completions'
+                    }
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span>API Key</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    type="password"
+                    value={aiParams.tutorApiKey}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorApiKey: e.target.value }))}
+                    placeholder="sk-..."
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span>API Version（Anthropic/Azure）</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    value={aiParams.tutorApiVersion}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorApiVersion: e.target.value }))}
+                    placeholder={aiParams.tutorProvider === 'azure_openai' ? '2024-10-21' : '2023-06-01'}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span>Deployment ID（Azure 可選）</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    value={aiParams.tutorDeploymentId}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorDeploymentId: e.target.value }))}
+                    placeholder="my-deployment"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span>助教 Temperature（0~2）</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    type="number"
+                    min={0}
+                    max={2}
+                    step={0.1}
+                    value={aiParams.tutorTemperature}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorTemperature: Number(e.target.value) }))}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span>助教 Max Tokens</span>
+                  <input
+                    className="w-full rounded border px-2 py-1"
+                    type="number"
+                    min={1}
+                    max={4000}
+                    step={1}
+                    value={aiParams.tutorMaxTokens}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorMaxTokens: Number(e.target.value) }))}
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span>System Prompt（可客製助教風格）</span>
+                  <textarea
+                    className="min-h-24 w-full rounded border px-2 py-1"
+                    value={aiParams.tutorSystemPrompt}
+                    onChange={(e) => setAIParams((prev) => ({ ...prev, tutorSystemPrompt: e.target.value }))}
+                  />
+                </label>
+                <div className="md:col-span-2 rounded border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-600">
+                  <p className="font-semibold text-slate-700">Provider API 規格對應（策略模式）</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                    <li>OpenAI / OpenRouter / Custom：`chat/completions`，回應解析 `choices[0].message.content`。</li>
+                    <li>Anthropic：`v1/messages`，Header 需 `x-api-key` + `anthropic-version`，解析 `content[].text`。</li>
+                    <li>Google Gemini：`models/{'{model}'}:generateContent?key={'{apiKey}'}`，解析 `candidates[].content.parts[].text`。</li>
+                    <li>Azure OpenAI：`/openai/deployments/{'{deployment}'}/chat/completions?api-version=...`，Header 用 `api-key`。</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="mt-2">
             <button type="button" className="rounded bg-blue-600 px-3 py-2 text-white" onClick={saveAIParameterSettings}>

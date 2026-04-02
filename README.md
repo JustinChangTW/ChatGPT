@@ -363,19 +363,24 @@ Admin 已提供：
 
 ### Gen AI 使用與設定說明（實作版）
 
-目前程式中的 AI 助教回覆屬於**示範 mock**（可在 `app/wrong-notebook/page.tsx` 看到假回覆邏輯），尚未直接串接外部 LLM。正式接線建議採「前端呼叫 Next.js API Route、API Route 再呼叫模型供應商」。
+目前專案已支援「可切換 Provider 的 AI 助教」：在 Admin > API 與 AI 參數 > **AI 助教（錯題本追問）** 可直接設定 Provider、Endpoint、Model、System Prompt、Temperature、Max Tokens、API Key。
+
+實作位於：
+- `lib/services/ai-tutor-client.ts`：Provider Adapter（策略模式）
+- `lib/services/ai-params-config.ts`：助教參數儲存/正規化
+- `app/wrong-notebook/page.tsx`：呼叫 AI 助教與 fallback
 
 #### 1) 建議環境變數
-在 `.env.local`（本機）或 GitHub Actions Secrets（部署）新增：
+若你不想手動在 Admin 輸入，可用 `.env.local` 先準備（再複製貼到 Admin）：
 
 ```bash
-# 使用哪個供應商（例：openai / azure-openai / gemini）
+# 參考值（實際仍以 Admin 儲存參數為主）
 GEN_AI_PROVIDER=openai
 
-# 模型名稱（例：gpt-4.1-mini / gpt-4.1 / gpt-5-mini）
-GEN_AI_MODEL=gpt-4.1-mini
+# 模型名稱（例：gpt-4o-mini / claude-3-5-sonnet / gemini-1.5-pro）
+GEN_AI_MODEL=gpt-4o-mini
 
-# API 金鑰（務必只放在伺服器端，不可用 NEXT_PUBLIC_ 前綴）
+# API 金鑰（建議只在安全環境保存）
 GEN_AI_API_KEY=your_server_side_key
 
 # 可選：API Base URL（自建 gateway 或相容端點時使用）
@@ -384,7 +389,7 @@ GEN_AI_BASE_URL=
 
 > 注意：`GEN_AI_API_KEY` 不可使用 `NEXT_PUBLIC_` 前綴，否則會被打包到前端。
 
-#### 1-1) 以 ChatGPT / OpenAI 為例，手把手取得 API Key 與參數對應
+#### 1-1) 以 OpenAI 為例，手把手取得 API Key 與參數對應
 
 > 重點先講：**ChatGPT 網頁版/Plus 訂閱 ≠ OpenAI API Key**。  
 > 本系統需要的是 OpenAI Platform 的 API Key（給程式呼叫），不是 ChatGPT 網頁登入密碼。
@@ -420,7 +425,7 @@ GEN_AI_BASE_URL=
 
 ```bash
 GEN_AI_PROVIDER=openai
-GEN_AI_MODEL=gpt-4.1-mini
+GEN_AI_MODEL=gpt-4o-mini
 GEN_AI_API_KEY=sk-xxxx
 # 若無 gateway 可省略
 # GEN_AI_BASE_URL=https://your-gateway.example.com
@@ -444,10 +449,33 @@ GEN_AI_API_KEY=sk-xxxx
 > 若你目前只使用「內建字典 + 即時翻譯 fallback」，可先不設定上述 Gen AI 參數；要接 AI 助教再補即可。
 
 #### 2) 呼叫路徑建議
-1. 前端頁面（如錯題本）送出問題到 `/api/ai/explain-question`。  
-2. API Route 讀取 `GEN_AI_*` 設定後呼叫 LLM。  
-3. 回傳結構化 JSON（例如：`explanation/keyPoints/keywords/englishTerms`）。  
-4. 前端渲染回覆，並視需求寫入 `weakVocabulary` / `questionInsights`。
+目前預設：
+1. 錯題本送出問題。  
+2. `ai-tutor-client` 依 Provider Adapter 組裝不同 API 規格。  
+3. 解析標準化回覆文字。  
+4. 若雲端失敗，回退為離線助教回覆（不中斷 UX）。
+
+### 2-1) 主流 Gen AI Provider 規格（已內建）
+
+| Provider | 端點規格 | 認證/特殊 Header | 回覆解析 |
+|---|---|---|---|
+| OpenAI | `/v1/chat/completions` | `Authorization: Bearer <key>` | `choices[0].message.content` |
+| OpenRouter | `/api/v1/chat/completions` | `Authorization: Bearer <key>` | `choices[0].message.content` |
+| Custom(OpenAI-compatible) | 自訂 `chat/completions` | `Authorization: Bearer <key>` | `choices[0].message.content` |
+| Anthropic | `/v1/messages` | `x-api-key`, `anthropic-version` | `content[].text` |
+| Google Gemini | `models/{model}:generateContent?key={apiKey}` | query key | `candidates[].content.parts[].text` |
+| Azure OpenAI | `/openai/deployments/{deployment}/chat/completions?api-version=...` | `api-key` | `choices[0].message.content` |
+
+### 2-2) 彈性切換設計（經典設計模式）
+
+- 使用 **Strategy Pattern**：每個 Provider 都是 `ProviderAdapter`，各自實作：
+  - `buildRequest()`：把統一輸入轉成供應商特定請求格式
+  - `parseResponse()`：把供應商特定回應轉成統一文字
+- 使用 **Factory + Map Registry**：透過 `provider -> adapter` 對照表切換，不需改呼叫端。
+- 效益：
+  - 新增 Provider 僅需新增 adapter，不需改 UI 主流程
+  - Provider 切換可在 Admin 完成，無需改碼部署
+  - 錯誤隔離容易，fallback 行為一致
 
 #### 3) 部署設定（GitHub）
 到 `Repo Settings -> Secrets and variables -> Actions`：
