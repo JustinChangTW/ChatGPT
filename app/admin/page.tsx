@@ -30,7 +30,7 @@ import {
 import { AIParamsConfig, loadAIParamsConfig, saveAIParamsConfig } from '@/lib/services/ai-params-config';
 import { CCTKnowledgeItem } from '@/lib/knowledge/cct-knowledge-base';
 import { loadKnowledgeBaseEntries, resetKnowledgeBaseEntries, saveKnowledgeBaseEntries } from '@/lib/services/knowledge-base-storage';
-import { diagnoseAITutorConfig, quickProbeAITutor } from '@/lib/services/ai-tutor-client';
+import { diagnoseAITutorConfig, quickProbeAITutor, requestAITutorReply } from '@/lib/services/ai-tutor-client';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -73,6 +73,9 @@ export default function AdminPage() {
   const [selectedKnowledgeId, setSelectedKnowledgeId] = useState<string>('');
   const [knowledgeSearch, setKnowledgeSearch] = useState('');
   const [knowledgeJson, setKnowledgeJson] = useState('');
+  const [aiTestPrompt, setAiTestPrompt] = useState('請用 3 句話告訴我：為什麼我這題會錯？');
+  const [aiTestResult, setAiTestResult] = useState('');
+  const [isAiTesting, setIsAiTesting] = useState(false);
   const [emailAuthForm, setEmailAuthForm] = useState<EmailAuthForm>({ email: '', password: '' });
   const [emailAuthErrors, setEmailAuthErrors] = useState<EmailAuthFormErrors>({});
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
@@ -376,6 +379,27 @@ export default function AdminPage() {
     setResult('AI 助教連線自檢中…');
     const probe = await quickProbeAITutor();
     setResult(probe.ok ? `AI 助教連線成功：${probe.detail}` : `AI 助教連線失敗：${probe.detail}`);
+  };
+
+  const runAITutorDirectTest = async () => {
+    const diagnosis = diagnoseAITutorConfig();
+    if (!diagnosis.ok) {
+      setAiTestResult(`❌ 設定未完成：${diagnosis.reason}\n👉 建議：${diagnosis.fix}`);
+      return;
+    }
+    setIsAiTesting(true);
+    setAiTestResult('測試中…請稍候');
+    const reply = await requestAITutorReply(
+      '【測試題】下列哪個選項最能降低社交工程風險？',
+      '【測試詳解】應優先做員工安全意識訓練、MFA 與釣魚演練。',
+      [{ role: 'user', text: aiTestPrompt.trim() || '請解釋這題重點' }]
+    );
+    setIsAiTesting(false);
+    setAiTestResult(
+      reply
+        ? `✅ 測試成功，AI 有回覆：\n\n${reply}`
+        : '❌ 測試失敗：沒有收到 AI 回覆。請檢查 API Key / 模型權限 / Endpoint / CORS（可先按「AI 助教連線自檢」）。'
+    );
   };
 
   const filteredKnowledgeEntries = useMemo(() => {
@@ -1201,6 +1225,35 @@ export default function AdminPage() {
                 <button type="button" className="rounded border border-emerald-400 bg-emerald-50 px-2 py-1 text-emerald-800" onClick={() => void runAITutorQuickDebug()}>
                   AI 助教連線自檢
                 </button>
+              </div>
+              <div className="mt-2 rounded border border-blue-200 bg-blue-50 p-2 text-xs text-blue-900">
+                <p className="font-semibold">幼幼班 4 步驟（先讓 AI 會動）</p>
+                <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+                  <li>按「快速設定 OpenAI」</li>
+                  <li>貼上 API Key（sk-...）</li>
+                  <li>按「儲存 AI 參數」</li>
+                  <li>按「AI 助教連線自檢」或下面「直接測試」</li>
+                </ol>
+              </div>
+              <div className="mt-2 rounded border border-slate-200 bg-slate-50 p-2">
+                <p className="text-xs font-semibold text-slate-700">直接測試 AI 助教（不用去錯題本）</p>
+                <textarea
+                  className="mt-2 min-h-16 w-full rounded border bg-white p-2 text-xs"
+                  value={aiTestPrompt}
+                  onChange={(e) => setAiTestPrompt(e.target.value)}
+                  placeholder="輸入測試問題，例如：為什麼我這題會錯？"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="rounded border border-blue-400 bg-blue-600 px-2 py-1 text-xs text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => void runAITutorDirectTest()}
+                    disabled={isAiTesting}
+                  >
+                    {isAiTesting ? '測試中…' : '直接測試 AI 助教'}
+                  </button>
+                </div>
+                {aiTestResult && <pre className="mt-2 whitespace-pre-wrap rounded border bg-white p-2 text-xs text-slate-700">{aiTestResult}</pre>}
               </div>
               <div className="mt-2 grid gap-2 md:grid-cols-2">
                 <label className="space-y-1">
