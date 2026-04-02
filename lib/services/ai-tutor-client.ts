@@ -11,6 +11,23 @@ type ProviderAdapter = {
   parseResponse: (payload: unknown) => string;
 };
 
+function readableApiError(detail: unknown): string {
+  const payload = detail as { error?: { message?: string; code?: string; type?: string } };
+  const code = payload.error?.code ?? payload.error?.type ?? '';
+  const message = payload.error?.message ?? '';
+  if (code === 'insufficient_quota') {
+    return 'API 額度不足（insufficient_quota）。請到 OpenAI Billing/Usage 檢查是否已超額或尚未開通付費。';
+  }
+  if (code === 'invalid_api_key') {
+    return 'API Key 無效（invalid_api_key）。請確認 key 是否正確、未撤銷。';
+  }
+  if (code === 'model_not_found') {
+    return '模型不存在或無權限（model_not_found）。請確認模型名稱與帳號權限。';
+  }
+  if (message) return `${message}${code ? `（${code}）` : ''}`;
+  return '未知錯誤（請檢查 API Key / 模型 / Endpoint / 配額）';
+}
+
 const buildOpenAICompatibleMessages = (systemPrompt: string, userPrompt: string) => [
   { role: 'system', content: systemPrompt },
   { role: 'user', content: userPrompt }
@@ -148,20 +165,37 @@ const adapters: Record<AIParamsConfig['tutorProvider'], ProviderAdapter> = {
 };
 
 export async function requestAITutorReply(question: string, explanation: string, history: ChatTurn[]): Promise<string | null> {
+  const result = await requestAITutorReplyDebug(question, explanation, history);
+  return result.reply;
+}
+
+export async function requestAITutorReplyDebug(
+  question: string,
+  explanation: string,
+  history: ChatTurn[]
+): Promise<{ reply: string | null; error: string | null }> {
   const cfg = loadAIParamsConfig();
-  if (!cfg.tutorEnabled || !cfg.tutorApiKey.trim()) return null;
+  if (!cfg.tutorEnabled || !cfg.tutorApiKey.trim()) return { reply: null, error: 'AI 助教未啟用或 API Key 為空。' };
 
   const userPrompt = `題目：${question}\n詳解：${explanation}\n對話歷史：${history.map((x) => `${x.role}: ${x.text}`).join('\n')}`;
   const adapter = adapters[cfg.tutorProvider];
   try {
     const { url, init } = adapter.buildRequest(cfg, { system: cfg.tutorSystemPrompt, user: userPrompt });
     const response = await fetch(url, init);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      let detail: unknown = null;
+      try {
+        detail = await response.json();
+      } catch {
+        detail = null;
+      }
+      return { reply: null, error: `HTTP ${response.status}：${readableApiError(detail)}` };
+    }
     const payload = await response.json();
     const parsed = adapter.parseResponse(payload);
-    return parsed || null;
-  } catch {
-    return null;
+    return { reply: parsed || null, error: parsed ? null : '有回應但解析不到內容（請檢查 provider 回傳格式）。' };
+  } catch (err) {
+    return { reply: null, error: `請求失敗：${err instanceof Error ? err.message : String(err)}` };
   }
 }
 
@@ -188,9 +222,64 @@ export function diagnoseAITutorConfig(): AITutorDiagnosis {
 export async function quickProbeAITutor(): Promise<{ ok: boolean; detail: string }> {
   const diagnosis = diagnoseAITutorConfig();
   if (!diagnosis.ok) return { ok: false, detail: `${diagnosis.reason}｜${diagnosis.fix}` };
-  const reply = await requestAITutorReply('請用一句話回覆：AI 連線測試成功', '這是系統連線測試，不需解題。', [
+  const result = await requestAITutorReplyDebug('請用一句話回覆：AI 連線測試成功', '這是系統連線測試，不需解題。', [
     { role: 'user', text: '連線測試' }
   ]);
-  if (!reply) return { ok: false, detail: '請求已送出但未取得回覆，可能是 CORS/Key/模型權限/Endpoint 問題。' };
-  return { ok: true, detail: `成功：${reply.slice(0, 60)}${reply.length > 60 ? '…' : ''}` };
+  if (!result.reply) return { ok: false, detail: result.error ?? '請求已送出但未取得回覆。' };
+  return { ok: true, detail: `成功：${result.reply.slice(0, 60)}${result.reply.length > 60 ? '…' : ''}` };
+}
+
+export async function listAvailableTutorModels(): Promise<{ ok: boolean; models: string[]; error?: string }> {
+  const cfg = loadAIParamsConfig();
+  if (!cfg.tutorApiKey.trim()) {
+    return { ok: false, models: [], error: 'API Key 為空，無法取得模型清單。' };
+  }
+  try {
+    if (cfg.tutorProvider === 'google_gemini') {
+      const endpoint = (cfg.tutorEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models?key={apiKey}')
+        .replace('{model}:generateContent', '')
+        .replace('{apiKey}', encodeURIComponent(cfg.tutorApiKey));
+      const res = await fetch(endpoint);
+      if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status}` };
+      const payload = (await res.json()) as { models?: Array<{ name?: string }> };
+      const models = (payload.models ?? []).map((x) => x.name?.replace('models/', '') || '').filter(Boolean);
+      return { ok: true, models: Array.from(new Set(models)).sort() };
+    }
+
+    const buildModelsEndpoint = () => {
+      if (cfg.tutorProvider === 'azure_openai') {
+        const ep = (cfg.tutorEndpoint || '').replace(/\/$/, '');
+        const apiVersion = cfg.tutorApiVersion || '2024-10-21';
+        return `${ep}/openai/models?api-version=${apiVersion}`;
+      }
+      const base =
+        cfg.tutorProvider === 'openrouter'
+          ? (cfg.tutorEndpoint || 'https://openrouter.ai/api/v1/chat/completions')
+          : (cfg.tutorEndpoint || 'https://api.openai.com/v1/chat/completions');
+      return base.replace(/\/chat\/completions$/, '/models');
+    };
+
+    const modelsUrl = buildModelsEndpoint();
+    const headers: Record<string, string> =
+      cfg.tutorProvider === 'azure_openai'
+        ? { 'api-key': cfg.tutorApiKey }
+        : cfg.tutorProvider === 'anthropic'
+          ? { 'x-api-key': cfg.tutorApiKey, 'anthropic-version': cfg.tutorApiVersion || '2023-06-01' }
+          : { Authorization: `Bearer ${cfg.tutorApiKey}` };
+    const res = await fetch(modelsUrl, { headers });
+    if (!res.ok) {
+      let detail: unknown = null;
+      try {
+        detail = await res.json();
+      } catch {
+        detail = null;
+      }
+      return { ok: false, models: [], error: `HTTP ${res.status}：${readableApiError(detail)}` };
+    }
+    const payload = (await res.json()) as { data?: Array<{ id?: string }> };
+    const models = (payload.data ?? []).map((x) => x.id || '').filter(Boolean);
+    return { ok: true, models: Array.from(new Set(models)).sort() };
+  } catch (err) {
+    return { ok: false, models: [], error: err instanceof Error ? err.message : String(err) };
+  }
 }

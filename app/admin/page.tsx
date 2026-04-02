@@ -30,7 +30,7 @@ import {
 import { AIParamsConfig, loadAIParamsConfig, saveAIParamsConfig } from '@/lib/services/ai-params-config';
 import { CCTKnowledgeItem } from '@/lib/knowledge/cct-knowledge-base';
 import { loadKnowledgeBaseEntries, resetKnowledgeBaseEntries, saveKnowledgeBaseEntries } from '@/lib/services/knowledge-base-storage';
-import { diagnoseAITutorConfig, quickProbeAITutor, requestAITutorReply } from '@/lib/services/ai-tutor-client';
+import { diagnoseAITutorConfig, listAvailableTutorModels, quickProbeAITutor, requestAITutorReplyDebug } from '@/lib/services/ai-tutor-client';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -76,6 +76,8 @@ export default function AdminPage() {
   const [aiTestPrompt, setAiTestPrompt] = useState('請用 3 句話告訴我：為什麼我這題會錯？');
   const [aiTestResult, setAiTestResult] = useState('');
   const [isAiTesting, setIsAiTesting] = useState(false);
+  const [availableTutorModels, setAvailableTutorModels] = useState<string[]>([]);
+  const [isLoadingTutorModels, setIsLoadingTutorModels] = useState(false);
   const [emailAuthForm, setEmailAuthForm] = useState<EmailAuthForm>({ email: '', password: '' });
   const [emailAuthErrors, setEmailAuthErrors] = useState<EmailAuthFormErrors>({});
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
@@ -389,17 +391,33 @@ export default function AdminPage() {
     }
     setIsAiTesting(true);
     setAiTestResult('測試中…請稍候');
-    const reply = await requestAITutorReply(
+    const test = await requestAITutorReplyDebug(
       '【測試題】下列哪個選項最能降低社交工程風險？',
       '【測試詳解】應優先做員工安全意識訓練、MFA 與釣魚演練。',
       [{ role: 'user', text: aiTestPrompt.trim() || '請解釋這題重點' }]
     );
     setIsAiTesting(false);
     setAiTestResult(
-      reply
-        ? `✅ 測試成功，AI 有回覆：\n\n${reply}`
-        : '❌ 測試失敗：沒有收到 AI 回覆。請檢查 API Key / 模型權限 / Endpoint / CORS（可先按「AI 助教連線自檢」）。'
+      test.reply
+        ? `✅ 測試成功，AI 有回覆：\n\n${test.reply}`
+        : `❌ 測試失敗：${test.error ?? '沒有收到 AI 回覆'}`
     );
+  };
+
+  const fetchTutorModelOptions = async () => {
+    setIsLoadingTutorModels(true);
+    const result = await listAvailableTutorModels();
+    setIsLoadingTutorModels(false);
+    if (!result.ok) {
+      setResult(`取得模型清單失敗：${result.error ?? '未知錯誤'}`);
+      return;
+    }
+    setAvailableTutorModels(result.models);
+    if (result.models.length === 0) {
+      setResult('已連線，但此 Provider 沒有回傳可用模型清單。');
+      return;
+    }
+    setResult(`已取得模型清單，共 ${result.models.length} 個。請從下拉選單挑選。`);
   };
 
   const filteredKnowledgeEntries = useMemo(() => {
@@ -1288,6 +1306,35 @@ export default function AdminPage() {
                     placeholder="gpt-4o-mini"
                   />
                 </label>
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-600">模型清單（可先抓再選）</span>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-1 text-xs"
+                      onClick={() => void fetchTutorModelOptions()}
+                      disabled={isLoadingTutorModels}
+                    >
+                      {isLoadingTutorModels ? '取得中…' : '取得可用模型清單'}
+                    </button>
+                    <select
+                      className="min-w-[220px] rounded border px-2 py-1 text-xs"
+                      value=""
+                      onChange={(e) => {
+                        const picked = e.target.value;
+                        if (!picked) return;
+                        setAIParams((prev) => ({ ...prev, tutorModel: picked }));
+                      }}
+                    >
+                      <option value="">請選擇模型（不會覆蓋直到你選）</option>
+                      {availableTutorModels.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <label className="space-y-1 md:col-span-2">
                   <span>API Endpoint</span>
                   <input
