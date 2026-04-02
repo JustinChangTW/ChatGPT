@@ -228,3 +228,58 @@ export async function quickProbeAITutor(): Promise<{ ok: boolean; detail: string
   if (!result.reply) return { ok: false, detail: result.error ?? '請求已送出但未取得回覆。' };
   return { ok: true, detail: `成功：${result.reply.slice(0, 60)}${result.reply.length > 60 ? '…' : ''}` };
 }
+
+export async function listAvailableTutorModels(): Promise<{ ok: boolean; models: string[]; error?: string }> {
+  const cfg = loadAIParamsConfig();
+  if (!cfg.tutorApiKey.trim()) {
+    return { ok: false, models: [], error: 'API Key 為空，無法取得模型清單。' };
+  }
+  try {
+    if (cfg.tutorProvider === 'google_gemini') {
+      const endpoint = (cfg.tutorEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models?key={apiKey}')
+        .replace('{model}:generateContent', '')
+        .replace('{apiKey}', encodeURIComponent(cfg.tutorApiKey));
+      const res = await fetch(endpoint);
+      if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status}` };
+      const payload = (await res.json()) as { models?: Array<{ name?: string }> };
+      const models = (payload.models ?? []).map((x) => x.name?.replace('models/', '') || '').filter(Boolean);
+      return { ok: true, models: Array.from(new Set(models)).sort() };
+    }
+
+    const buildModelsEndpoint = () => {
+      if (cfg.tutorProvider === 'azure_openai') {
+        const ep = (cfg.tutorEndpoint || '').replace(/\/$/, '');
+        const apiVersion = cfg.tutorApiVersion || '2024-10-21';
+        return `${ep}/openai/models?api-version=${apiVersion}`;
+      }
+      const base =
+        cfg.tutorProvider === 'openrouter'
+          ? (cfg.tutorEndpoint || 'https://openrouter.ai/api/v1/chat/completions')
+          : (cfg.tutorEndpoint || 'https://api.openai.com/v1/chat/completions');
+      return base.replace(/\/chat\/completions$/, '/models');
+    };
+
+    const modelsUrl = buildModelsEndpoint();
+    const headers: Record<string, string> =
+      cfg.tutorProvider === 'azure_openai'
+        ? { 'api-key': cfg.tutorApiKey }
+        : cfg.tutorProvider === 'anthropic'
+          ? { 'x-api-key': cfg.tutorApiKey, 'anthropic-version': cfg.tutorApiVersion || '2023-06-01' }
+          : { Authorization: `Bearer ${cfg.tutorApiKey}` };
+    const res = await fetch(modelsUrl, { headers });
+    if (!res.ok) {
+      let detail: unknown = null;
+      try {
+        detail = await res.json();
+      } catch {
+        detail = null;
+      }
+      return { ok: false, models: [], error: `HTTP ${res.status}：${readableApiError(detail)}` };
+    }
+    const payload = (await res.json()) as { data?: Array<{ id?: string }> };
+    const models = (payload.data ?? []).map((x) => x.id || '').filter(Boolean);
+    return { ok: true, models: Array.from(new Set(models)).sort() };
+  } catch (err) {
+    return { ok: false, models: [], error: err instanceof Error ? err.message : String(err) };
+  }
+}
