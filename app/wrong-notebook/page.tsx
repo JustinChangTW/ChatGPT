@@ -4,23 +4,18 @@ import { ReactNode, useMemo, useState } from 'react';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { loadQuestionBank } from '@/lib/services/local-question-bank';
 import { loadWrongNotebook } from '@/lib/services/wrong-notebook-storage';
-import { requestAITutorReply } from '@/lib/services/ai-tutor-client';
+import { requestAITutorReplyDebug } from '@/lib/services/ai-tutor-client';
 
 function aiTutorReply(question: string, explanation: string, history: { role: 'user' | 'assistant'; text: string }[]): string {
   const latest = history[history.length - 1]?.text ?? '';
   return `AI 助教（示範）\n你問：「${latest}」\n\n重點：${question}\n建議理解方向：${explanation}\n\n追問建議：\n1) 這題考點和常見陷阱是什麼？\n2) 若換成實作題要怎麼判斷？\n3) 請用一步一步方式再解一次。`;
 }
 
-async function askAITutor(question: string, explanation: string, history: { role: 'user' | 'assistant'; text: string }[]): Promise<string> {
-  const cloud = await requestAITutorReply(question, explanation, history);
-  if (cloud) return cloud;
-  return `${aiTutorReply(question, explanation, history)}\n\n（備註：雲端 AI 助教不可用，已改用離線助教回覆。請檢查 Admin 的 Provider / API Key / Endpoint / 模型設定。）`;
-}
-
 export default function WrongNotebookPage() {
   const [openedId, setOpenedId] = useState<string | null>(null);
   const [askByQuestion, setAskByQuestion] = useState<Record<string, string>>({});
   const [isAskingByQuestion, setIsAskingByQuestion] = useState<Record<string, boolean>>({});
+  const [aiErrorByQuestion, setAiErrorByQuestion] = useState<Record<string, string>>({});
   const [chat, setChat] = useState<Record<string, { role: 'user' | 'assistant'; text: string }[]>>({});
   const [wrongRows] = useState(() => loadWrongNotebook());
 
@@ -46,8 +41,15 @@ export default function WrongNotebookPage() {
     if (!userText) return;
     const nextHistory = [...(chat[questionId] ?? []), { role: 'user' as const, text: userText }];
     setIsAskingByQuestion((prev) => ({ ...prev, [questionId]: true }));
-    const reply = await askAITutor(stem, explanation, nextHistory);
+    const cloud = await requestAITutorReplyDebug(stem, explanation, nextHistory);
+    const reply = cloud.reply ?? aiTutorReply(stem, explanation, nextHistory);
     setIsAskingByQuestion((prev) => ({ ...prev, [questionId]: false }));
+    setAiErrorByQuestion((prev) => ({
+      ...prev,
+      [questionId]: cloud.reply
+        ? ''
+        : `錯誤：${cloud.error ?? '未知錯誤'}\n為什麼：AI API 沒有回傳可用內容。\n怎麼修：到 Admin 按「快速設定 OpenAI」→ 貼 API Key → 儲存 → 按「AI 助教連線自檢」。`
+    }));
     setChat((s) => ({ ...s, [questionId]: [...nextHistory, { role: 'assistant', text: reply }] }));
     setAskByQuestion((prev) => ({ ...prev, [questionId]: '' }));
   };
@@ -140,6 +142,7 @@ export default function WrongNotebookPage() {
             if (!row?.question) return <p>找不到題目內容。</p>;
             const q = row.question;
             const history = chat[openedId] ?? [];
+            const aiError = aiErrorByQuestion[openedId] ?? '';
             return (
               <div className="space-y-3">
                 <h2 className="text-lg font-semibold">{q.stem}</h2>
@@ -157,6 +160,11 @@ export default function WrongNotebookPage() {
 
                 <div className="rounded border bg-slate-50 p-3">
                   <p className="mb-2 font-semibold">AI 助教互動（可追問）</p>
+                  {aiError && (
+                    <pre className="mb-2 whitespace-pre-wrap rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-800">
+                      {aiError}
+                    </pre>
+                  )}
                   <div className="max-h-56 space-y-2 overflow-auto rounded border bg-white p-2 text-sm">
                     {history.length === 0 ? <p className="text-slate-500">尚未提問，輸入問題開始互動。</p> : null}
                     {history.map((m, idx) => (
