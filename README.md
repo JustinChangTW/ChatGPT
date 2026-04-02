@@ -120,6 +120,61 @@ npm run import:questions -- data/sample-questions.json
 
 > 匯入後資料會保存到瀏覽器 `localStorage`（key: `cct_question_bank_v1`），Chapter Practice / Exam Mode 會直接讀取此題庫。
 
+## 知識庫維護 JSON 範例（Admin）
+
+在 Admin > `C. 題庫匯入管理` > `知識庫維護 / JSON 匯入` 可直接貼上以下格式：
+
+```json
+[
+  {
+    "id": "chapter-1-threat-modeling",
+    "chapterNo": 1,
+    "chapterTitle": "Information Security Threats and Attacks",
+    "title": "Threat Modeling 基礎",
+    "summary": "識別資產、威脅來源、攻擊面，並建立優先修補順序。",
+    "keyPoints": [
+      "先列出資產與資料流",
+      "再辨識威脅行為與可利用弱點",
+      "以影響度與可能性做風險排序"
+    ],
+    "examSignals": [
+      "題目提到 STRIDE / attack surface / trust boundary",
+      "問你如何先做防護優先級"
+    ],
+    "tags": ["chapter-1", "threat-modeling", "risk-assessment"]
+  },
+  {
+    "id": "chapter-3-firewall-policy",
+    "chapterNo": 3,
+    "chapterTitle": "Network Security Controls",
+    "title": "Firewall Policy Review",
+    "summary": "以最小權限原則檢查 inbound/outbound 規則，避免過寬放行。",
+    "keyPoints": [
+      "規則由明確 allow + 預設 deny 組成",
+      "定期清理過期或未使用規則",
+      "高風險服務需搭配監控告警"
+    ],
+    "examSignals": [
+      "題目比較 stateful 與 stateless filtering",
+      "題目詢問規則順序與例外處理"
+    ],
+    "tags": ["chapter-3", "firewall", "network-control"]
+  }
+]
+```
+
+### 欄位說明（知識庫）
+- `id`：唯一鍵（重覆時會在匯入時被覆蓋）
+- `chapterNo`：章節編號（數字）
+- `chapterTitle`：章節標題
+- `title`：知識點名稱
+- `summary`：知識點摘要
+- `keyPoints`：重點條列（字串陣列）
+- `examSignals`：常見出題訊號（字串陣列）
+- `tags`：標籤（字串陣列）
+
+> 匯入邏輯：以 `id` 判定重覆，重覆資料會覆蓋舊值；新 `id` 會新增。
+
 
 ## 測試
 ```bash
@@ -419,6 +474,38 @@ GEN_AI_BASE_URL=
 | OpenAI 模型 ID | `GEN_AI_MODEL` | `gpt-4.1-mini` |
 | OpenAI Secret Key | `GEN_AI_API_KEY` | `sk-xxxx` |
 | （可選）自建轉發 API | `GEN_AI_BASE_URL` | `https://your-gateway.example.com` |
+
+##### D-1. Admin「AI 助教」每個欄位要填什麼？（OpenAI 實例）
+
+以下對照你畫面中的每個欄位，直接照著填即可：
+
+| Admin 欄位 | OpenAI 來源 | 如何取得 | 建議值/格式 |
+|---|---|---|---|
+| 啟用 AI 助教 | 本地開關 | Admin 直接勾選 | 開啟 |
+| Provider | 供應商類型 | Admin 下拉選單 | `OpenAI` |
+| 助教模型 | Models 頁模型 ID | OpenAI Platform → Models | 例如 `gpt-4o-mini` / `gpt-5` |
+| API Endpoint | OpenAI Chat Completions endpoint | OpenAI API 文件固定路徑 | `https://api.openai.com/v1/chat/completions` |
+| API Key | API Keys 頁建立的 secret key | OpenAI Platform → API Keys → Create new secret key | `sk-...` |
+| API Version（Anthropic/Azure） | OpenAI 不使用 | 不需設定 | 留白即可 |
+| Deployment ID（Azure 可選） | OpenAI 不使用 | 不需設定 | 留白即可 |
+| 助教 Temperature | 取樣參數 | 由你控制回答穩定度 | 建議 `0.2 ~ 0.5` |
+| 助教 Max Tokens | 回答長度上限 | 由你控制輸出長度 | 建議 `300 ~ 800` |
+| System Prompt | 你的助教規則 | 由你撰寫（可直接用預設） | 例如「先指出盲點，再給步驟，繁中精簡」 |
+
+> 一句話版：OpenAI 真正需要你從平台拿的只有 **模型 ID** 與 **API Key**；其餘欄位多為系統參數或 Azure/Anthropic 專用。
+
+##### D-2. 最快可用設定（OpenAI）
+
+1. 在 Admin 點「快速設定 OpenAI」  
+2. 貼上 `API Key`（`sk-...`）  
+3. `助教模型` 填你可用的模型 ID（例如 `gpt-4o-mini`）  
+4. 按「AI 助教連線自檢」  
+5. 出現「AI 助教連線成功」即可到錯題本實際追問
+
+若失敗，通常是：
+- Key 無效/過期
+- 模型 ID 填錯或該帳號沒有模型權限
+- 網路/CORS 或公司網路策略擋掉外呼
 
 ##### E. 寫入本機 `.env.local`
 在專案根目錄建立（或修改）`.env.local`：

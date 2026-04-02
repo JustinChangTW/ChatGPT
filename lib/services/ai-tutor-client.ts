@@ -1,6 +1,7 @@
 import { AIParamsConfig, loadAIParamsConfig } from '@/lib/services/ai-params-config';
 
 export type ChatTurn = { role: 'user' | 'assistant'; text: string };
+export type AITutorDiagnosis = { ok: true } | { ok: false; reason: string; fix: string };
 
 type ProviderAdapter = {
   buildRequest: (
@@ -162,4 +163,34 @@ export async function requestAITutorReply(question: string, explanation: string,
   } catch {
     return null;
   }
+}
+
+export function diagnoseAITutorConfig(): AITutorDiagnosis {
+  const cfg = loadAIParamsConfig();
+  if (!cfg.tutorEnabled) {
+    return { ok: false, reason: 'AI 助教尚未啟用', fix: '到 Admin 勾選「啟用 AI 助教」。' };
+  }
+  if (!cfg.tutorApiKey.trim()) {
+    return { ok: false, reason: 'API Key 為空', fix: '到 Admin 的 AI 助教設定填入有效 API Key。' };
+  }
+  if (!cfg.tutorModel.trim()) {
+    return { ok: false, reason: '模型名稱為空', fix: '到 Admin 填入模型，例如 gpt-4o-mini。' };
+  }
+  if (!cfg.tutorEndpoint.trim() && cfg.tutorProvider !== 'azure_openai') {
+    return { ok: false, reason: 'Endpoint 為空', fix: '到 Admin 填入對應 Provider Endpoint 或使用快速設定。' };
+  }
+  if (cfg.tutorProvider === 'azure_openai' && !cfg.tutorEndpoint.includes('openai.azure.com')) {
+    return { ok: false, reason: 'Azure Endpoint 格式不符', fix: 'Azure 應為 https://{resource}.openai.azure.com' };
+  }
+  return { ok: true };
+}
+
+export async function quickProbeAITutor(): Promise<{ ok: boolean; detail: string }> {
+  const diagnosis = diagnoseAITutorConfig();
+  if (!diagnosis.ok) return { ok: false, detail: `${diagnosis.reason}｜${diagnosis.fix}` };
+  const reply = await requestAITutorReply('請用一句話回覆：AI 連線測試成功', '這是系統連線測試，不需解題。', [
+    { role: 'user', text: '連線測試' }
+  ]);
+  if (!reply) return { ok: false, detail: '請求已送出但未取得回覆，可能是 CORS/Key/模型權限/Endpoint 問題。' };
+  return { ok: true, detail: `成功：${reply.slice(0, 60)}${reply.length > 60 ? '…' : ''}` };
 }

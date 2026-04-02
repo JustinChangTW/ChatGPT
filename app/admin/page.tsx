@@ -30,6 +30,7 @@ import {
 import { AIParamsConfig, loadAIParamsConfig, saveAIParamsConfig } from '@/lib/services/ai-params-config';
 import { CCTKnowledgeItem } from '@/lib/knowledge/cct-knowledge-base';
 import { loadKnowledgeBaseEntries, resetKnowledgeBaseEntries, saveKnowledgeBaseEntries } from '@/lib/services/knowledge-base-storage';
+import { diagnoseAITutorConfig, quickProbeAITutor } from '@/lib/services/ai-tutor-client';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -326,6 +327,55 @@ export default function AdminPage() {
     const saved = saveAIParamsConfig(aiParams);
     setAIParams(saved);
     setResult('已儲存 AI 參數設定。');
+  };
+
+  const applyAITutorQuickPreset = (provider: AIParamsConfig['tutorProvider']) => {
+    if (provider === 'openai') {
+      setAIParams((prev) => ({
+        ...prev,
+        tutorProvider: 'openai',
+        tutorEndpoint: 'https://api.openai.com/v1/chat/completions',
+        tutorModel: 'gpt-4o-mini',
+        tutorApiVersion: '',
+        tutorDeploymentId: ''
+      }));
+      setResult('已套用 OpenAI 快速設定。請補上 API Key 後按「AI 助教連線自檢」。');
+      return;
+    }
+    if (provider === 'anthropic') {
+      setAIParams((prev) => ({
+        ...prev,
+        tutorProvider: 'anthropic',
+        tutorEndpoint: 'https://api.anthropic.com/v1/messages',
+        tutorModel: 'claude-3-5-sonnet-latest',
+        tutorApiVersion: '2023-06-01',
+        tutorDeploymentId: ''
+      }));
+      setResult('已套用 Anthropic 快速設定。請補上 API Key 後按「AI 助教連線自檢」。');
+      return;
+    }
+    if (provider === 'google_gemini') {
+      setAIParams((prev) => ({
+        ...prev,
+        tutorProvider: 'google_gemini',
+        tutorEndpoint: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}',
+        tutorModel: 'gemini-1.5-pro',
+        tutorApiVersion: '',
+        tutorDeploymentId: ''
+      }));
+      setResult('已套用 Gemini 快速設定。請補上 API Key 後按「AI 助教連線自檢」。');
+    }
+  };
+
+  const runAITutorQuickDebug = async () => {
+    const diagnosis = diagnoseAITutorConfig();
+    if (!diagnosis.ok) {
+      setResult(`AI 助教設定檢查未過：${diagnosis.reason}。建議：${diagnosis.fix}`);
+      return;
+    }
+    setResult('AI 助教連線自檢中…');
+    const probe = await quickProbeAITutor();
+    setResult(probe.ok ? `AI 助教連線成功：${probe.detail}` : `AI 助教連線失敗：${probe.detail}`);
   };
 
   const filteredKnowledgeEntries = useMemo(() => {
@@ -1138,6 +1188,20 @@ export default function AdminPage() {
             <div className="md:col-span-2 mt-2 rounded border bg-white p-3">
               <p className="font-semibold">AI 助教（錯題本追問）</p>
               <p className="mt-1 text-slate-500">若未啟用或 API Key 為空，錯題本會自動使用離線助教回覆。</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" className="rounded border bg-slate-900 px-2 py-1 text-white" onClick={() => applyAITutorQuickPreset('openai')}>
+                  快速設定 OpenAI
+                </button>
+                <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyAITutorQuickPreset('anthropic')}>
+                  快速設定 Claude
+                </button>
+                <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyAITutorQuickPreset('google_gemini')}>
+                  快速設定 Gemini
+                </button>
+                <button type="button" className="rounded border border-emerald-400 bg-emerald-50 px-2 py-1 text-emerald-800" onClick={() => void runAITutorQuickDebug()}>
+                  AI 助教連線自檢
+                </button>
+              </div>
               <div className="mt-2 grid gap-2 md:grid-cols-2">
                 <label className="space-y-1">
                   <span>啟用 AI 助教</span>
