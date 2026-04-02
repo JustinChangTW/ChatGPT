@@ -42,6 +42,7 @@ export default function ChapterPracticePage() {
   const [customKeywordsByQuestion, setCustomKeywordsByQuestion] = useState<Record<string, DictionaryEntry[]>>({});
   const [notesByQuestion, setNotesByQuestion] = useState<Record<string, string>>({});
   const [showNotePreview, setShowNotePreview] = useState(false);
+  const [showAssistPanel, setShowAssistPanel] = useState(false);
   const questionPanelRef = useRef<HTMLDivElement | null>(null);
   const noteEditorRef = useRef<HTMLTextAreaElement | null>(null);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
@@ -96,6 +97,10 @@ export default function ChapterPracticePage() {
   const selectedChapterProgress = useMemo(
     () => chapterProgressCards.find((x) => x.chapter === selectedChapter) ?? null,
     [chapterProgressCards, selectedChapter]
+  );
+  const sessionProgressPercent = useMemo(
+    () => (questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0),
+    [answeredCount, questions.length]
   );
 
   const suggestedEntries = useMemo(() => {
@@ -368,81 +373,68 @@ export default function ChapterPracticePage() {
           </button>
         </div>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div>
-          <p className="text-sm font-semibold">章節進度總覽（點任一章可切換練習章節）</p>
-          <p className="text-xs text-slate-500">桌機一排最多 6 個，手機會自動換行（RWD）。</p>
+      {current && !submitted ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 shadow-sm">
+          <p className="text-sm font-semibold text-blue-900">目前作答章節進度：{selectedChapter}</p>
+          <p className="mt-1 text-xs text-blue-800">已作答 {answeredCount}/{questions.length} 題（{sessionProgressPercent}%）</p>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-blue-100">
+            <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${sessionProgressPercent}%` }} />
+          </div>
+          <p className="mt-2 text-[11px] text-blue-700">作答中僅顯示當前章節，避免視覺干擾；交卷後會寫回章節總覽統計。</p>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {chapterProgressCards.map((item) => (
-            <button
-              key={item.chapter}
-              type="button"
-              onClick={() => setSelectedChapter(item.chapter)}
-              className={`rounded-xl border p-2 text-left transition ${
-                item.chapter === selectedChapter ? 'border-blue-400 bg-blue-50 shadow-sm' : 'bg-slate-50 hover:bg-slate-100'
-              }`}
-            >
-              <p className="truncate text-xs font-semibold">{item.chapter}</p>
-              <div className="mt-2 flex items-center gap-2">
-                <div
-                  className="grid h-10 w-10 place-items-center rounded-full text-[10px] font-semibold text-slate-700"
-                  style={{
-                    background: `conic-gradient(#2563eb ${item.completionRate}%, #e2e8f0 0%)`
-                  }}
-                >
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-white">{item.completionRate}%</span>
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div>
+            <p className="text-sm font-semibold">章節進度總覽（點任一章可切換練習章節）</p>
+            <p className="text-xs text-slate-500">桌機一排最多 6 個，手機會自動換行（RWD）。</p>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {chapterProgressCards.map((item) => (
+              <button
+                key={item.chapter}
+                type="button"
+                onClick={() => setSelectedChapter(item.chapter)}
+                className={`rounded-xl border p-2 text-left transition ${
+                  item.chapter === selectedChapter ? 'border-blue-400 bg-blue-50 shadow-sm' : 'bg-slate-50 hover:bg-slate-100'
+                }`}
+              >
+                <p className="truncate text-xs font-semibold">{item.chapter}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <div
+                    className="grid h-10 w-10 place-items-center rounded-full text-[10px] font-semibold text-slate-700"
+                    style={{
+                      background: `conic-gradient(#2563eb ${item.completionRate}%, #e2e8f0 0%)`
+                    }}
+                  >
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-white">{item.completionRate}%</span>
+                  </div>
+                  <div className="text-[11px] text-slate-600">
+                    <p>最近 {item.lastScore} 分</p>
+                    <p>完成 {item.completed}/{item.attempts || 0}</p>
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-600">
-                  <p>最近 {item.lastScore} 分</p>
-                  <p>完成 {item.completed}/{item.attempts || 0}</p>
-                </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {current && !submitted && practiceMode === 'single' ? (
         <div ref={questionPanelRef} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-2 text-sm text-slate-500">第 {currentIndex + 1}/{questions.length} 題 · {current.sourceType === 'generated' ? '系統生成題' : '原始題庫'}</p>
           <h2 className="mb-2 whitespace-pre-line text-lg font-semibold leading-8">{renderKeywordMixedText(current.stem)}</h2>
-          <p className="mb-3 text-xs text-slate-500">可直接反白英文單字/片語後，使用下方「學習工具面板」。</p>
-          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-semibold text-slate-700">學習工具面板（關鍵字 / 字典 / 翻譯）</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={() => void translateSelectedText(current.id)}>
-                翻譯選取文字
-              </button>
-              <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={() => void translateSelectedText(current.id, true)}>
-                翻譯並加入關鍵字
-              </button>
-              <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={addAllSuggestedTerms}>
-                建議關鍵字全加到字庫
-              </button>
-              <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={() => setInlineKeywordMode((v) => !v)}>
-                {inlineKeywordMode ? '切回原文顯示' : '中英混合顯示'}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">目前模式：{inlineKeywordMode ? '中英混合（關鍵字含中文）' : '原文英文'}</p>
-            {activeKeywordEntries.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {activeKeywordEntries.map((entry) => (
-                  <button
-                    key={entry.term}
-                    type="button"
-                    className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100"
-                    onClick={() => {
-                      void openWordCard(entry.term, current.id);
-                      setWordHint('');
-                    }}
-                  >
-                    {entry.term} · {entry.translation}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+            <button type="button" className="rounded border px-2 py-1 hover:bg-slate-50" onClick={() => setShowAssistPanel((v) => !v)}>
+              {showAssistPanel ? '收合學習工具與筆記' : '展開學習工具與筆記'}
+            </button>
+            <button type="button" className="rounded border px-2 py-1 hover:bg-slate-50" onClick={() => setInlineKeywordMode((v) => !v)}>
+              {inlineKeywordMode ? '切回原文顯示' : '中英混合顯示'}
+            </button>
+            <button type="button" className="rounded border px-2 py-1 hover:bg-slate-50" onClick={() => void translateSelectedText(current.id)}>
+              快速翻譯選取文字
+            </button>
           </div>
+          {!showAssistPanel && <p className="mb-3 text-xs text-slate-500">為避免干擾作答，學習工具與筆記預設收合。</p>}
           {isTranslating && <p className="mb-3 text-xs text-slate-500">翻譯中…</p>}
           {selectedWord && (
             <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
@@ -471,31 +463,6 @@ export default function ChapterPracticePage() {
               {wordHint && <p className="mt-1 text-xs text-emerald-700">{wordHint}</p>}
             </div>
           )}
-          <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-indigo-900">本題筆記（Markdown）</p>
-              <button type="button" className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs" onClick={() => setShowNotePreview((v) => !v)}>
-                {showNotePreview ? '回到編輯' : '預覽'}
-              </button>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('h2')}>H2</button>
-              <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bold')}>粗體</button>
-              <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bullet')}>清單</button>
-              <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('code')}>Code</button>
-            </div>
-            {!showNotePreview ? (
-              <textarea
-                ref={noteEditorRef}
-                className="mt-2 min-h-28 w-full rounded border bg-white p-2 text-sm"
-                placeholder="可用 Markdown：## 標題、**粗體**、- 清單、`code`"
-                value={currentNote}
-                onChange={(e) => updateCurrentNote(e.target.value)}
-              />
-            ) : (
-              <div className="mt-2 min-h-28 rounded border bg-white p-2">{renderMarkdownPreview(currentNote)}</div>
-            )}
-          </div>
           <div className="space-y-2">
             {current.options.map((opt) => (
               <label
@@ -541,6 +508,67 @@ export default function ChapterPracticePage() {
               })}
             </div>
           </div>
+          {showAssistPanel && (
+            <div className="mt-4 space-y-3 border-t pt-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-semibold text-slate-700">學習工具面板（關鍵字 / 字典 / 翻譯）</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={() => void translateSelectedText(current.id)}>
+                    翻譯選取文字
+                  </button>
+                  <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={() => void translateSelectedText(current.id, true)}>
+                    翻譯並加入關鍵字
+                  </button>
+                  <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-white" onClick={addAllSuggestedTerms}>
+                    建議關鍵字全加到字庫
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">目前模式：{inlineKeywordMode ? '中英混合（關鍵字含中文）' : '原文英文'}</p>
+                {activeKeywordEntries.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {activeKeywordEntries.map((entry) => (
+                      <button
+                        key={entry.term}
+                        type="button"
+                        className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-100"
+                        onClick={() => {
+                          void openWordCard(entry.term, current.id);
+                          setWordHint('');
+                        }}
+                      >
+                        {entry.term} · {entry.translation}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-indigo-900">本題筆記（Markdown）</p>
+                  <button type="button" className="rounded border border-indigo-300 bg-white px-2 py-1 text-xs" onClick={() => setShowNotePreview((v) => !v)}>
+                    {showNotePreview ? '回到編輯' : '預覽'}
+                  </button>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('h2')}>H2</button>
+                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bold')}>粗體</button>
+                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bullet')}>清單</button>
+                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('code')}>Code</button>
+                </div>
+                {!showNotePreview ? (
+                  <textarea
+                    ref={noteEditorRef}
+                    className="mt-2 min-h-28 w-full rounded border bg-white p-2 text-sm"
+                    placeholder="可用 Markdown：## 標題、**粗體**、- 清單、`code`"
+                    value={currentNote}
+                    onChange={(e) => updateCurrentNote(e.target.value)}
+                  />
+                ) : (
+                  <div className="mt-2 min-h-28 rounded border bg-white p-2">{renderMarkdownPreview(currentNote)}</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
 
