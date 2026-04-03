@@ -83,6 +83,7 @@ export default function AdminPage() {
   const [isLoadingTutorModels, setIsLoadingTutorModels] = useState(false);
   const [emailAuthForm, setEmailAuthForm] = useState<EmailAuthForm>({ email: '', password: '' });
   const [emailAuthErrors, setEmailAuthErrors] = useState<EmailAuthFormErrors>({});
+  const [currentUid, setCurrentUid] = useState('');
   const [userRole, setUserRole] = useState<AppUserRole>('guest');
   const [userProgressRows, setUserProgressRows] = useState<UserProgressSummary[]>([]);
   const [isLoadingUserProgress, setIsLoadingUserProgress] = useState(false);
@@ -142,6 +143,7 @@ export default function AdminPage() {
     if (!auth) {
       setUserLabel('Firebase 未設定');
       setUserRole('guest');
+      setCurrentUid('');
       return;
     }
 
@@ -159,6 +161,7 @@ export default function AdminPage() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       logAction('auth.stateChanged', 'success', { user: user?.email ?? user?.uid ?? 'none' });
       setUserLabel(user?.email ?? '未登入');
+      setCurrentUid(user?.uid ?? '');
       if (!user) return;
       const role = await getCurrentUserRole();
       setUserRole(role);
@@ -822,6 +825,33 @@ export default function AdminPage() {
     }
   };
 
+  const copyCurrentUid = async () => {
+    if (!currentUid) {
+      setResult('目前尚未登入，沒有可複製的 UID。');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(currentUid);
+      setResult(`已複製目前 UID：${currentUid}`);
+    } catch {
+      setResult(`目前 UID：${currentUid}（瀏覽器拒絕剪貼簿存取，請手動複製）`);
+    }
+  };
+
+  const copyUserDocPath = async () => {
+    if (!currentUid) {
+      setResult('目前尚未登入，無法產生 users/{uid} 路徑。');
+      return;
+    }
+    const path = `users/${currentUid}`;
+    try {
+      await navigator.clipboard.writeText(path);
+      setResult(`已複製文件路徑：${path}`);
+    } catch {
+      setResult(`請手動複製文件路徑：${path}`);
+    }
+  };
+
   const openFirebaseAuthSettings = () => {
     logAction('firebase.openAuthSettings', 'start');
     const pid = firebaseForm.projectId?.trim();
@@ -963,8 +993,19 @@ export default function AdminPage() {
         </p>
         <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
           <p className="font-semibold">管理者角色設定教學（users/{'{uid}'}.role）</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-white/70 px-2 py-1">
+            <span>
+              目前登入 UID：<span className="font-mono">{currentUid || '（尚未登入）'}</span>
+            </span>
+            <button type="button" className="rounded border border-amber-300 bg-white px-2 py-0.5" onClick={copyCurrentUid}>
+              複製目前 UID
+            </button>
+            <button type="button" className="rounded border border-amber-300 bg-white px-2 py-0.5" onClick={copyUserDocPath}>
+              複製 users/{'{uid}'} 路徑
+            </button>
+          </div>
           <ol className="mt-1 list-decimal space-y-0.5 pl-5">
-            <li>先登入網站，複製目前使用者 UID（可在 Firebase Authentication users 找到）。</li>
+            <li>先登入網站，直接用上方「複製目前 UID」（或到 Firebase Authentication users 查看）。</li>
             <li>到 Firestore 建立/修改文件：`users/{'{uid}'}`。</li>
             <li>
               加入欄位 <code>role: &quot;admin&quot;</code>（一般使用者為 <code>member</code>）。
