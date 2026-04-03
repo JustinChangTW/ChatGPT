@@ -489,33 +489,6 @@ export default function ChapterPracticePage() {
           </div>
           {!showAssistPanel && <p className="mb-3 text-xs text-slate-500">為避免干擾作答，學習工具與筆記預設收合。</p>}
           {isTranslating && <p className="mb-3 text-xs text-slate-500">翻譯中…</p>}
-          {selectedWord && (
-            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
-              <p className="font-semibold">
-                {selectedWord.term} → {selectedWord.translation}
-              </p>
-              {selectedWord.phonetic && <p className="mt-1 text-xs text-slate-600">發音：{selectedWord.phonetic}</p>}
-              {selectedWord.audioUrl && (
-                <audio className="mt-1 w-full max-w-xs" controls src={selectedWord.audioUrl}>
-                  您的瀏覽器不支援 audio 播放。
-                </audio>
-              )}
-              {!selectedWord.audioUrl && (
-                <button
-                  type="button"
-                  className="mt-1 rounded border px-2 py-1 text-xs hover:bg-slate-50"
-                  onClick={() => speakTerm(selectedWord.term)}
-                >
-                  播放發音（瀏覽器語音）
-                </button>
-              )}
-              <p className="mt-1 text-slate-700">{selectedWord.definition}</p>
-              <button type="button" className="mt-2 rounded border border-amber-400 bg-white px-2 py-1 text-xs" onClick={saveWord}>
-                加入單字庫
-              </button>
-              {wordHint && <p className="mt-1 text-xs text-emerald-700">{wordHint}</p>}
-            </div>
-          )}
           <div className="space-y-2">
             {current.options.map((opt) => (
               <label
@@ -591,6 +564,33 @@ export default function ChapterPracticePage() {
                     建議關鍵字全加到字庫
                   </button>
                 </div>
+                {selectedWord && (
+                  <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+                    <p className="font-semibold">
+                      {selectedWord.term} → {selectedWord.translation}
+                    </p>
+                    {selectedWord.phonetic && <p className="mt-1 text-xs text-slate-600">發音：{selectedWord.phonetic}</p>}
+                    {selectedWord.audioUrl && (
+                      <audio className="mt-1 w-full max-w-xs" controls src={selectedWord.audioUrl}>
+                        您的瀏覽器不支援 audio 播放。
+                      </audio>
+                    )}
+                    {!selectedWord.audioUrl && (
+                      <button
+                        type="button"
+                        className="mt-1 rounded border px-2 py-1 text-xs hover:bg-slate-50"
+                        onClick={() => speakTerm(selectedWord.term)}
+                      >
+                        播放發音（瀏覽器語音）
+                      </button>
+                    )}
+                    <p className="mt-1 text-slate-700">{selectedWord.definition}</p>
+                    <button type="button" className="mt-2 rounded border border-amber-400 bg-white px-2 py-1 text-xs" onClick={saveWord}>
+                      加入單字庫
+                    </button>
+                    {wordHint && <p className="mt-1 text-xs text-emerald-700">{wordHint}</p>}
+                  </div>
+                )}
                 <p className="mt-2 text-xs text-slate-500">目前模式：{inlineKeywordMode ? '中英混合（關鍵字含中文）' : '原文英文'}</p>
                 {activeKeywordEntries.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">

@@ -45,7 +45,30 @@ export default function ExamPage() {
       return;
     }
     saveExamSessionDraft(session);
-  }, [session]);
+    const draftQuestionResults = session.questions.map((q) => {
+      const userAnswer = session.answers[q.id] ?? '';
+      return {
+        questionId: q.id,
+        sourceType: q.sourceType,
+        userAnswer,
+        correctAnswer: q.correctAnswer,
+        isCorrect: userAnswer !== '' && userAnswer === q.correctAnswer,
+        chapter: q.chapter,
+        domain: q.domain,
+        questionType: q.questionType
+      };
+    });
+    const draftAttempt = buildPracticeAttempt({
+      id: session.id,
+      userId: currentUserId,
+      mode: 'exam',
+      questionResults: draftQuestionResults,
+      startedAt: session.createdAt,
+      submittedAt: new Date().toISOString()
+    });
+    savePracticeAttempt(draftAttempt);
+    setHistory(loadPracticeAttempts().filter((a) => a.mode === 'exam'));
+  }, [session, currentUserId]);
 
   const answeredCount = useMemo(() => {
     if (!session) return 0;
@@ -83,7 +106,7 @@ export default function ExamPage() {
         sourceType: q.sourceType,
         userAnswer,
         correctAnswer: q.correctAnswer,
-        isCorrect: userAnswer === q.correctAnswer,
+        isCorrect: userAnswer !== '' && userAnswer === q.correctAnswer,
         chapter: q.chapter,
         domain: q.domain,
         questionType: q.questionType

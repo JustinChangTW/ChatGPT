@@ -966,7 +966,9 @@ export default function AdminPage() {
           <ol className="mt-1 list-decimal space-y-0.5 pl-5">
             <li>先登入網站，複製目前使用者 UID（可在 Firebase Authentication users 找到）。</li>
             <li>到 Firestore 建立/修改文件：`users/{'{uid}'}`。</li>
-            <li>加入欄位 `role: \"admin\"`（一般使用者為 `member`）。</li>
+            <li>
+              加入欄位 <code>role: &quot;admin&quot;</code>（一般使用者為 <code>member</code>）。
+            </li>
             <li>重新整理此頁即可生效。</li>
           </ol>
         </div>
