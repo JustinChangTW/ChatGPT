@@ -1,0 +1,30 @@
+{
+  "format": "simple-v2-blueprint",
+  "sourceExam": "EC-Council CCT 212-82",
+  "classificationReference": "CCTv1-Exam-Blueprint",
+  "questions": [
+    {
+      "questionNo": 1,
+      "chapterNo": 1,
+      "domainCode": "1",
+      "domain": "Information Security Threats and Attacks",
+      "subdomainCode": "1.2",
+      "subdomain": "Information Security Attacks",
+      "question": "題目文字",
+      "options": ["選項A", "選項B", "選項C", "選項D"],
+      "answer": "A",
+      "explanation": "詳解",
+      "questionType": "theory",
+      "difficulty": "medium",
+      "keywords": ["sql injection"],
+      "tags": [
+        "chapter-1",
+        "domain-information-security-threats-and-attacks",
+        "subdomain-1.2"
+      ],
+      "sourceType": "original",
+      "classificationMethod": "blueprint_inference_from_question_text",
+      "classificationConfidence": "high"
+    }
+  ]
+}
