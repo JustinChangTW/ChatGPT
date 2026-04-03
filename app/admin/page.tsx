@@ -31,6 +31,8 @@ import { AIParamsConfig, loadAIParamsConfig, saveAIParamsConfig } from '@/lib/se
 import { CCTKnowledgeItem } from '@/lib/knowledge/cct-knowledge-base';
 import { loadKnowledgeBaseEntries, resetKnowledgeBaseEntries, saveKnowledgeBaseEntries } from '@/lib/services/knowledge-base-storage';
 import { diagnoseAITutorConfig, listAvailableTutorModels, quickProbeAITutor, requestAITutorReplyDebug } from '@/lib/services/ai-tutor-client';
+import { getCurrentUserRole, requireAdminRole, type AppUserRole } from '@/lib/services/user-role-service';
+import { loadAllUserProgressSummaries, type UserProgressSummary } from '@/lib/services/user-progress-admin';
 
 const importSchema = z.object({
   payload: z.string().min(2, '請貼上 JSON')
@@ -81,6 +83,9 @@ export default function AdminPage() {
   const [isLoadingTutorModels, setIsLoadingTutorModels] = useState(false);
   const [emailAuthForm, setEmailAuthForm] = useState<EmailAuthForm>({ email: '', password: '' });
   const [emailAuthErrors, setEmailAuthErrors] = useState<EmailAuthFormErrors>({});
+  const [userRole, setUserRole] = useState<AppUserRole>('guest');
+  const [userProgressRows, setUserProgressRows] = useState<UserProgressSummary[]>([]);
+  const [isLoadingUserProgress, setIsLoadingUserProgress] = useState(false);
   const [firebaseForm, setFirebaseForm] = useState<FirebaseForm>({
     apiKey: '',
     authDomain: '',
@@ -136,6 +141,7 @@ export default function AdminPage() {
 
     if (!auth) {
       setUserLabel('Firebase 未設定');
+      setUserRole('guest');
       return;
     }
 
@@ -154,6 +160,8 @@ export default function AdminPage() {
       logAction('auth.stateChanged', 'success', { user: user?.email ?? user?.uid ?? 'none' });
       setUserLabel(user?.email ?? '未登入');
       if (!user) return;
+      const role = await getCurrentUserRole();
+      setUserRole(role);
 
       const pulled = await hydrateLocalQuestionBankFromCloud();
       if (pulled.ok && pulled.questions) {
@@ -261,6 +269,11 @@ export default function AdminPage() {
 
   const onSubmit = (values: ImportForm) => {
     logAction('import.submit', 'start');
+    if (!isAdmin) {
+      logAction('import.submit', 'fail', { reason: 'not-admin' });
+      setResult('僅管理者可匯入題庫。');
+      return;
+    }
     try {
       const parsed = JSON.parse(values.payload);
       const validated = validateQuestionImport(parsed);
@@ -325,11 +338,19 @@ export default function AdminPage() {
   };
 
   const saveDictionaryProviderSettings = () => {
+    if (!isAdmin) {
+      setResult('僅管理者可調整 API 與系統參數。');
+      return;
+    }
     saveDictionaryProviders(dictionaryProviders);
     setResult('已儲存字典 API 設定（主/備援順序）。');
   };
 
   const saveAIParameterSettings = () => {
+    if (!isAdmin) {
+      setResult('僅管理者可調整 API 與系統參數。');
+      return;
+    }
     const saved = saveAIParamsConfig(aiParams);
     setAIParams(saved);
     setResult('已儲存 AI 參數設定。');
@@ -533,6 +554,10 @@ export default function AdminPage() {
   }, [questionListPage, totalQuestionPages]);
 
   const clearImported = () => {
+    if (!isAdmin) {
+      setResult('僅管理者可匯入或清除題庫。');
+      return;
+    }
     logAction('bank.clearImported', 'start');
     resetQuestionBank();
     const restored = loadQuestionBank();
@@ -553,6 +578,24 @@ export default function AdminPage() {
     const res = resetLearningProgress();
     logAction('progress.reset', 'success', { removed: res.removed.length });
     setResult(res.removed.length > 0 ? `已重置學習進度（${res.removed.length} 個項目）。` : '目前沒有可重置的學習進度資料。');
+  };
+
+  const loadUserProgressForAdmin = async () => {
+    setIsLoadingUserProgress(true);
+    const roleCheck = await requireAdminRole();
+    if (!roleCheck.ok) {
+      setIsLoadingUserProgress(false);
+      setResult(roleCheck.reason);
+      return;
+    }
+    const res = await loadAllUserProgressSummaries();
+    setIsLoadingUserProgress(false);
+    if (!res.ok) {
+      setResult(`載入使用者作答進度失敗：${res.error}`);
+      return;
+    }
+    setUserProgressRows(res.rows);
+    setResult(`已載入 ${res.rows.length} 位使用者的作答概況。`);
   };
 
   const loginGoogle = async () => {
@@ -882,6 +925,7 @@ export default function AdminPage() {
     [emailAuthForm.email, emailAuthForm.password]
   );
   const emailAuthHasBlockingError = Object.keys(emailAuthValidationPreview).length > 0;
+  const isAdmin = userRole === 'admin';
 
   return (
     <div className="space-y-4">
@@ -897,10 +941,11 @@ export default function AdminPage() {
             <button
               key={tab.id}
               type="button"
+              disabled={tab.id === 'api' && !isAdmin}
               onClick={() => setActiveAdminTab(tab.id as 'sync' | 'api' | 'bank')}
               className={`rounded-lg px-3 py-2 text-left transition ${
                 activeAdminTab === tab.id ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-              }`}
+              } ${tab.id === 'api' && !isAdmin ? 'cursor-not-allowed opacity-50' : ''}`}
             >
               {tab.label}
             </button>
@@ -913,6 +958,18 @@ export default function AdminPage() {
       <h2 className="text-lg font-semibold">A. Firebase 同步與登入</h2>
       <div className="rounded border bg-white p-3 text-sm">
         <p>目前狀態：{firebaseStatusText}</p>
+        <p className="mt-1 text-xs text-slate-600">
+          目前角色：<span className="font-semibold">{userRole}</span>（admin 才能匯入題庫與修改系統參數）
+        </p>
+        <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+          <p className="font-semibold">管理者角色設定教學（users/{'{uid}'}.role）</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+            <li>先登入網站，複製目前使用者 UID（可在 Firebase Authentication users 找到）。</li>
+            <li>到 Firestore 建立/修改文件：`users/{'{uid}'}`。</li>
+            <li>加入欄位 `role: \"admin\"`（一般使用者為 `member`）。</li>
+            <li>重新整理此頁即可生效。</li>
+          </ol>
+        </div>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:flex-wrap">
           <button
             className="rounded border px-3 py-2"
@@ -1097,12 +1154,60 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {isAdmin && (
+          <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold text-slate-700">管理者後台：所有使用者作答進度</p>
+              <button
+                type="button"
+                className="rounded border bg-white px-2 py-1"
+                onClick={() => void loadUserProgressForAdmin()}
+                disabled={isLoadingUserProgress}
+              >
+                {isLoadingUserProgress ? '載入中…' : '載入使用者進度'}
+              </button>
+            </div>
+            {userProgressRows.length > 0 && (
+              <div className="mt-2 overflow-x-auto">
+                <table className="min-w-full border-collapse text-left text-[11px]">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="px-2 py-1">UID</th>
+                      <th className="px-2 py-1">角色</th>
+                      <th className="px-2 py-1">作答次數</th>
+                      <th className="px-2 py-1">平均分數</th>
+                      <th className="px-2 py-1">最近作答</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userProgressRows.map((row) => (
+                      <tr key={row.uid} className="border-b">
+                        <td className="px-2 py-1 font-mono">{row.uid}</td>
+                        <td className="px-2 py-1">{row.role}</td>
+                        <td className="px-2 py-1">{row.attempts}</td>
+                        <td className="px-2 py-1">{row.avgScore}</td>
+                        <td className="px-2 py-1">{row.lastSubmittedAt}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
         </>
       )}
 
       {activeAdminTab === 'api' && (
         <>
+      {!isAdmin ? (
+      <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        此分頁僅管理者可調整。請先將 `users/{'{uid}'}.role` 設為 `admin` 後重新整理。
+      </div>
+      ) : (
+      <>
       <h2 className="text-lg font-semibold">B. API 與 AI 參數</h2>
       <div className="rounded border bg-white p-3 text-sm">
         <p className="text-xs text-slate-500">此分頁內容較多：已將 AI 參數改為可展開區塊，預設先顯示字典 API。</p>
@@ -1460,6 +1565,8 @@ export default function AdminPage() {
           </div>
         </details>
       </div>
+      </>
+      )}
         </>
       )}
 

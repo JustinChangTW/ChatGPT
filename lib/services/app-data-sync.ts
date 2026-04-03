@@ -15,6 +15,12 @@ import { ensureFirebaseUser } from '@/lib/services/firebase-session';
 const SHARED_DOC = { collection: 'publicData', id: 'cctSharedCommon' } as const;
 type SyncFailReason = 'firebase-not-configured' | 'unknown' | 'user-not-signed-in';
 
+async function isAdminUser(uid: string): Promise<boolean> {
+  if (!db) return false;
+  const userSnap = await getDoc(doc(db, 'users', uid));
+  return userSnap.data()?.role === 'admin';
+}
+
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((item) => stripUndefined(item)) as T;
@@ -34,14 +40,19 @@ export async function syncAllLocalDataToCloud(): Promise<{ ok: boolean; reason?:
   try {
     const session = await ensureFirebaseUser();
     if (!session.ok) return { ok: false, reason: 'user-not-signed-in', error: session.error };
+    const isAdmin = await isAdminUser(session.uid);
 
     const commonData = stripUndefined({
-      questionBank: loadQuestionBank(),
       vocabularyBank: loadVocabularyBank(),
-      dictionaryProviders: loadDictionaryProviders(),
       customKeywords: loadCustomKeywords(),
       knowledgeBase: loadKnowledgeBaseEntries(),
-      aiParams: loadAIParamsConfig(),
+      ...(isAdmin
+        ? {
+            questionBank: loadQuestionBank(),
+            dictionaryProviders: loadDictionaryProviders(),
+            aiParams: loadAIParamsConfig()
+          }
+        : {}),
       updatedAt: serverTimestamp()
     });
     const personalData = stripUndefined({
@@ -109,11 +120,12 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
       getDoc(doc(db, SHARED_DOC.collection, SHARED_DOC.id)),
       getDoc(doc(db, 'users', session.uid))
     ]);
+    const isAdmin = await isAdminUser(session.uid);
     const commonData = commonSnap.data()?.commonData;
     const personalData = personalSnap.data()?.personalData;
     if (!commonData && !personalData) return { ok: false, reason: 'no-cloud-data' };
 
-    if (Array.isArray(commonData?.questionBank)) saveQuestionBank(commonData.questionBank);
+    if (isAdmin && Array.isArray(commonData?.questionBank)) saveQuestionBank(commonData.questionBank);
     if (Array.isArray(personalData?.practiceAttempts)) replacePracticeAttempts(personalData.practiceAttempts);
     if (Array.isArray(personalData?.wrongNotebook)) saveWrongNotebook(personalData.wrongNotebook);
     if (Array.isArray(personalData?.chapterProgress)) saveChapterProgress(personalData.chapterProgress);
@@ -121,10 +133,10 @@ export async function hydrateAllLocalDataFromCloud(): Promise<{
       // keep write path centralized in existing service via direct localStorage entry
       window.localStorage.setItem('cct_vocabulary_bank_v1', JSON.stringify(commonData.vocabularyBank));
     }
-    if (Array.isArray(commonData?.dictionaryProviders)) saveDictionaryProviders(commonData.dictionaryProviders);
+    if (isAdmin && Array.isArray(commonData?.dictionaryProviders)) saveDictionaryProviders(commonData.dictionaryProviders);
     if (commonData?.customKeywords && typeof commonData.customKeywords === 'object') saveCustomKeywords(commonData.customKeywords);
     if (Array.isArray(commonData?.knowledgeBase)) saveKnowledgeBaseEntries(commonData.knowledgeBase);
-    if (commonData?.aiParams && typeof commonData.aiParams === 'object') saveAIParamsConfig(commonData.aiParams);
+    if (isAdmin && commonData?.aiParams && typeof commonData.aiParams === 'object') saveAIParamsConfig(commonData.aiParams);
 
     return {
       ok: true,

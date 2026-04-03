@@ -9,6 +9,7 @@ import { buildPracticeAttempt } from '@/lib/services/practice-attempt-service';
 import { deletePracticeAttempt, loadPracticeAttempts, savePracticeAttempt } from '@/lib/services/practice-attempt-storage';
 import { rebuildWrongNotebookFromAttempts } from '@/lib/services/wrong-notebook-storage';
 import { clearExamSessionDraft, loadExamSessionDraft, saveExamSessionDraft } from '@/lib/services/exam-session-storage';
+import { auth } from '@/lib/firebase/client';
 
 type ExamSession = {
   id: string;
@@ -27,6 +28,7 @@ export default function ExamPage() {
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
   const [session, setSession] = useState<ExamSession | null>(null);
   const [history, setHistory] = useState(() => loadPracticeAttempts().filter((a) => a.mode === 'exam'));
+  const currentUserId = auth?.currentUser?.uid ?? 'local-user';
 
   useEffect(() => {
     setBank(loadQuestionBank());
@@ -89,14 +91,14 @@ export default function ExamPage() {
     });
     const attempt = buildPracticeAttempt({
       id: session.id,
-      userId: 'local-user',
+      userId: currentUserId,
       mode: 'exam',
       questionResults,
       startedAt: session.createdAt,
       submittedAt
     });
     savePracticeAttempt(attempt);
-    rebuildWrongNotebookFromAttempts(loadPracticeAttempts(), 'local-user');
+    rebuildWrongNotebookFromAttempts(loadPracticeAttempts(), currentUserId);
     setSession((s) => (s ? { ...s, submitted: true } : s));
     clearExamSessionDraft();
     setHistory(loadPracticeAttempts().filter((a) => a.mode === 'exam'));
@@ -116,7 +118,7 @@ export default function ExamPage() {
 
   const deletePaperRecord = (attemptId: string) => {
     const remaining = deletePracticeAttempt(attemptId);
-    rebuildWrongNotebookFromAttempts(remaining, 'local-user');
+    rebuildWrongNotebookFromAttempts(remaining, currentUserId);
     setHistory(remaining.filter((a) => a.mode === 'exam'));
     if (session?.id === attemptId) setSession(null);
   };

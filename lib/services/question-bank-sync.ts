@@ -1,10 +1,16 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { FirebaseError } from 'firebase/app';
-import { db } from '@/lib/firebase/client';
+import { auth, db } from '@/lib/firebase/client';
 import { Question, questionImportSchema } from '@/lib/schemas/question';
 import { loadQuestionBank, saveQuestionBank } from '@/lib/services/local-question-bank';
 
 const SHARED_DOC = { collection: 'publicData', id: 'cctShared' } as const;
+
+async function isAdminUser(): Promise<boolean> {
+  if (!db || !auth?.currentUser) return false;
+  const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+  return snap.data()?.role === 'admin';
+}
 
 export async function syncLocalQuestionBankToCloud(): Promise<{
   ok: boolean;
@@ -22,6 +28,9 @@ export async function syncLocalQuestionBankToCloud(): Promise<{
   }
 
   try {
+    if (!(await isAdminUser())) {
+      return { ok: false, reason: 'cloud-write-failed', error: '僅管理者可同步題庫到雲端。' };
+    }
     await setDoc(doc(db, SHARED_DOC.collection, SHARED_DOC.id), { questionBank: safeBank, questionBankUpdatedAt: serverTimestamp(), questionBankVersion: 1 }, { merge: true });
     return { ok: true };
   } catch (err) {

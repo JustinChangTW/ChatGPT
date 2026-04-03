@@ -14,6 +14,8 @@ import { DictionaryEntry, getBuiltinDictionaryTerms, lookupDictionaryTerm } from
 import { addVocabularyEntry, findVocabularyEntry } from '@/lib/services/vocabulary-storage';
 import { fetchRealtimeTranslation } from '@/lib/services/realtime-translation';
 import { loadCustomKeywords, saveCustomKeywords } from '@/lib/services/custom-keyword-storage';
+import { auth } from '@/lib/firebase/client';
+import { loadSharedQuestionNote, saveSharedQuestionNote } from '@/lib/services/shared-question-notes';
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
 
@@ -51,6 +53,7 @@ export default function ChapterPracticePage() {
   const [revealedByQuestion, setRevealedByQuestion] = useState<Record<string, boolean>>({});
   const [showNotePreview, setShowNotePreview] = useState(false);
   const [showAssistPanel, setShowAssistPanel] = useState(false);
+  const [sharedNoteStatus, setSharedNoteStatus] = useState('');
   const questionPanelRef = useRef<HTMLDivElement | null>(null);
   const noteEditorRef = useRef<HTMLTextAreaElement | null>(null);
   // Keep a single destructure to avoid accidental duplicate declarations during merge edits.
@@ -69,6 +72,7 @@ export default function ChapterPracticePage() {
   }, [customKeywordsByQuestion]);
 
   const current = questions[currentIndex];
+  const currentUserId = auth?.currentUser?.uid ?? 'local-user';
   const answeredCount = useMemo(
     () => questions.filter((q) => answers[q.id] !== undefined && answers[q.id] !== '').length,
     [questions, answers]
@@ -150,7 +154,7 @@ export default function ChapterPracticePage() {
     result.detail.forEach((item) => {
       if (item.userAnswer === undefined) return;
       recordWrongNotebook({
-        userId: 'local-user',
+        userId: currentUserId,
         questionId: item.question.id,
         isCorrect: item.correct,
         selectedAnswer: Array.isArray(item.userAnswer) ? item.userAnswer : String(item.userAnswer),
@@ -160,7 +164,7 @@ export default function ChapterPracticePage() {
     if (questionResults.length > 0) {
       const attempt = buildPracticeAttempt({
         id: `attempt-${Date.now()}`,
-        userId: 'local-user',
+        userId: currentUserId,
         mode: 'chapter',
         selectedChapter,
         questionResults,
@@ -322,6 +326,31 @@ export default function ChapterPracticePage() {
       setRevealedByQuestion((prev) => ({ ...prev, [current.id]: true }));
       setShowAssistPanel(true);
     }
+  };
+
+  useEffect(() => {
+    if (!current?.id) return;
+    let alive = true;
+    void (async () => {
+      const shared = await loadSharedQuestionNote(current.id);
+      if (!alive || !shared) return;
+      setNotesByQuestion((prev) => {
+        if ((prev[current.id] ?? '').trim().length > 0) return prev;
+        return { ...prev, [current.id]: shared.content };
+      });
+      if (shared.content.trim()) {
+        setSharedNoteStatus('已載入共編筆記。');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [current?.id]);
+
+  const saveCurrentSharedNote = async () => {
+    if (!current) return;
+    const res = await saveSharedQuestionNote(current.id, currentNote);
+    setSharedNoteStatus(res.ok ? '已儲存到共編筆記。' : `共編筆記儲存失敗：${res.reason}`);
   };
 
   const applyMarkdownSyntax = (syntax: 'bold' | 'h2' | 'bullet' | 'code') => {
@@ -593,7 +622,11 @@ export default function ChapterPracticePage() {
                   <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bold')}>粗體</button>
                   <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bullet')}>清單</button>
                   <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('code')}>Code</button>
+                  <button type="button" className="rounded border border-indigo-300 bg-white px-2 py-1" onClick={() => void saveCurrentSharedNote()}>
+                    儲存共編筆記
+                  </button>
                 </div>
+                {sharedNoteStatus && <p className="mt-1 text-xs text-indigo-700">{sharedNoteStatus}</p>}
                 {!showNotePreview ? (
                   <textarea
                     ref={noteEditorRef}
