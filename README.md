@@ -553,6 +553,47 @@ GEN_AI_API_KEY=sk-xxxx
 | Google Gemini | `models/{model}:generateContent?key={apiKey}` | query key | `candidates[].content.parts[].text` |
 | Azure OpenAI | `/openai/deployments/{deployment}/chat/completions?api-version=...` | `api-key` | `choices[0].message.content` |
 
+### 2-1-1) Gemini 可用模型取得法（已整合到系統）
+
+本專案 Admin 的「取得可用模型清單」已使用同一作法：
+
+```bash
+curl "https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_GEMINI_API_KEY"
+```
+
+系統會自動：
+1. 讀取 `models.list` 回傳的 `name`
+2. 檢查 `supportedGenerationMethods` 是否包含 `generateContent`
+3. 只顯示可直接文字生成的 Gemini 模型
+4. 自動去掉 `models/` 前綴後填入模型欄位（例如 `gemini-2.5-flash`）
+
+> 建議優先測試：`gemini-2.5-flash` 或 `gemini-2.5-flash-lite`（前提是 list 回傳有 `generateContent`）。
+
+### 2-1-2) OpenAI 可用模型取得法（已整合到系統）
+
+本專案 Admin 也支援 OpenAI 同概念查詢，使用：
+
+```bash
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer YOUR_OPENAI_API_KEY"
+```
+
+系統會自動：
+1. 讀取 `GET /v1/models` 回傳 `data[]`
+2. 以每個模型的 `id` 作為可選值
+3. 讓你在 Admin 下拉選單直接挑 `model`（不用手打）
+
+快速判讀：
+- Gemini 看 `name`（且需 `generateContent`）
+- OpenAI 看 `id`
+
+若你要查單一模型是否存在：
+
+```bash
+curl https://api.openai.com/v1/models/MODEL_ID \
+  -H "Authorization: Bearer YOUR_OPENAI_API_KEY"
+```
+
 ### 2-2) 彈性切換設計（經典設計模式）
 
 - 使用 **Strategy Pattern**：每個 Provider 都是 `ProviderAdapter`，各自實作：

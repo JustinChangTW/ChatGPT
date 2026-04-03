@@ -17,6 +17,19 @@ export type AIParamsConfig = {
   tutorSystemPrompt: string;
   tutorTemperature: number;
   tutorMaxTokens: number;
+  tutorProfiles: Record<
+    'openai' | 'anthropic' | 'google_gemini' | 'azure_openai' | 'openrouter' | 'custom_openai_compatible',
+    {
+      tutorEndpoint: string;
+      tutorApiKey: string;
+      tutorApiVersion: string;
+      tutorDeploymentId: string;
+      tutorModel: string;
+      tutorSystemPrompt: string;
+      tutorTemperature: number;
+      tutorMaxTokens: number;
+    }
+  >;
 };
 
 const STORAGE_KEY = 'cct_ai_params_v2';
@@ -40,7 +53,75 @@ const DEFAULT_CONFIG: AIParamsConfig = {
   tutorSystemPrompt:
     '你是一位 C|CT 考試助教。請先指出觀念盲點，再給可執行的修正步驟，最後補一個檢核問題。請用繁體中文且精簡。',
   tutorTemperature: 0.3,
-  tutorMaxTokens: 500
+  tutorMaxTokens: 500,
+  tutorProfiles: {
+    openai: {
+      tutorEndpoint: 'https://api.openai.com/v1/chat/completions',
+      tutorApiKey: '',
+      tutorApiVersion: '',
+      tutorDeploymentId: '',
+      tutorModel: 'gpt-4o-mini',
+      tutorSystemPrompt:
+        '你是一位 C|CT 考試助教。請先指出觀念盲點，再給可執行的修正步驟，最後補一個檢核問題。請用繁體中文且精簡。',
+      tutorTemperature: 0.3,
+      tutorMaxTokens: 500
+    },
+    anthropic: {
+      tutorEndpoint: 'https://api.anthropic.com/v1/messages',
+      tutorApiKey: '',
+      tutorApiVersion: '2023-06-01',
+      tutorDeploymentId: '',
+      tutorModel: 'claude-3-5-sonnet-latest',
+      tutorSystemPrompt:
+        '你是一位 C|CT 考試助教。請先指出觀念盲點，再給可執行的修正步驟，最後補一個檢核問題。請用繁體中文且精簡。',
+      tutorTemperature: 0.3,
+      tutorMaxTokens: 500
+    },
+    google_gemini: {
+      tutorEndpoint: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}',
+      tutorApiKey: '',
+      tutorApiVersion: '',
+      tutorDeploymentId: '',
+      tutorModel: 'gemini-1.5-pro',
+      tutorSystemPrompt:
+        '你是一位 C|CT 考試助教。請先指出觀念盲點，再給可執行的修正步驟，最後補一個檢核問題。請用繁體中文且精簡。',
+      tutorTemperature: 0.3,
+      tutorMaxTokens: 500
+    },
+    azure_openai: {
+      tutorEndpoint: 'https://{resource}.openai.azure.com',
+      tutorApiKey: '',
+      tutorApiVersion: '2024-10-21',
+      tutorDeploymentId: '',
+      tutorModel: 'gpt-4o-mini',
+      tutorSystemPrompt:
+        '你是一位 C|CT 考試助教。請先指出觀念盲點，再給可執行的修正步驟，最後補一個檢核問題。請用繁體中文且精簡。',
+      tutorTemperature: 0.3,
+      tutorMaxTokens: 500
+    },
+    openrouter: {
+      tutorEndpoint: 'https://openrouter.ai/api/v1/chat/completions',
+      tutorApiKey: '',
+      tutorApiVersion: '',
+      tutorDeploymentId: '',
+      tutorModel: 'openai/gpt-4o-mini',
+      tutorSystemPrompt:
+        '你是一位 C|CT 考試助教。請先指出觀念盲點，再給可執行的修正步驟，最後補一個檢核問題。請用繁體中文且精簡。',
+      tutorTemperature: 0.3,
+      tutorMaxTokens: 500
+    },
+    custom_openai_compatible: {
+      tutorEndpoint: 'https://api.openai.com/v1/chat/completions',
+      tutorApiKey: '',
+      tutorApiVersion: '',
+      tutorDeploymentId: '',
+      tutorModel: 'gpt-4o-mini',
+      tutorSystemPrompt:
+        '你是一位 C|CT 考試助教。請先指出觀念盲點，再給可執行的修正步驟，最後補一個檢核問題。請用繁體中文且精簡。',
+      tutorTemperature: 0.3,
+      tutorMaxTokens: 500
+    }
+  }
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -77,6 +158,9 @@ export function loadAIParamsConfig(): AIParamsConfig {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_CONFIG;
     const parsed = JSON.parse(raw) as Partial<AIParamsConfig>;
+    const provider = parsed.tutorProvider ?? DEFAULT_CONFIG.tutorProvider;
+    const baseProfiles = { ...DEFAULT_CONFIG.tutorProfiles, ...(parsed.tutorProfiles ?? {}) };
+    const activeProfile = baseProfiles[provider] ?? DEFAULT_CONFIG.tutorProfiles[provider];
     return {
       enabled: parsed.enabled ?? DEFAULT_CONFIG.enabled,
       model: parsed.model?.trim() || DEFAULT_CONFIG.model,
@@ -89,15 +173,33 @@ export function loadAIParamsConfig(): AIParamsConfig {
         ? (parsed.translationEndpoint as string).trim()
         : DEFAULT_CONFIG.translationEndpoint,
       tutorEnabled: parsed.tutorEnabled ?? DEFAULT_CONFIG.tutorEnabled,
-      tutorProvider: parsed.tutorProvider ?? DEFAULT_CONFIG.tutorProvider,
-      tutorEndpoint: isSafeTutorEndpoint(parsed.tutorEndpoint?.trim() || '') ? parsed.tutorEndpoint!.trim() : DEFAULT_CONFIG.tutorEndpoint,
-      tutorApiKey: parsed.tutorApiKey?.trim() || DEFAULT_CONFIG.tutorApiKey,
-      tutorApiVersion: parsed.tutorApiVersion?.trim() || DEFAULT_CONFIG.tutorApiVersion,
-      tutorDeploymentId: parsed.tutorDeploymentId?.trim() || DEFAULT_CONFIG.tutorDeploymentId,
-      tutorModel: parsed.tutorModel?.trim() || DEFAULT_CONFIG.tutorModel,
-      tutorSystemPrompt: parsed.tutorSystemPrompt?.trim() || DEFAULT_CONFIG.tutorSystemPrompt,
-      tutorTemperature: clamp(Number(parsed.tutorTemperature ?? DEFAULT_CONFIG.tutorTemperature), 0, 2),
-      tutorMaxTokens: clamp(Number(parsed.tutorMaxTokens ?? DEFAULT_CONFIG.tutorMaxTokens), 1, 4000)
+      tutorProvider: provider,
+      tutorEndpoint: isSafeTutorEndpoint((activeProfile.tutorEndpoint ?? '').trim())
+        ? activeProfile.tutorEndpoint.trim()
+        : DEFAULT_CONFIG.tutorProfiles[provider].tutorEndpoint,
+      tutorApiKey: activeProfile.tutorApiKey?.trim() || '',
+      tutorApiVersion: activeProfile.tutorApiVersion?.trim() || '',
+      tutorDeploymentId: activeProfile.tutorDeploymentId?.trim() || '',
+      tutorModel: activeProfile.tutorModel?.trim() || DEFAULT_CONFIG.tutorProfiles[provider].tutorModel,
+      tutorSystemPrompt: activeProfile.tutorSystemPrompt?.trim() || DEFAULT_CONFIG.tutorProfiles[provider].tutorSystemPrompt,
+      tutorTemperature: clamp(Number(activeProfile.tutorTemperature ?? DEFAULT_CONFIG.tutorProfiles[provider].tutorTemperature), 0, 2),
+      tutorMaxTokens: clamp(Number(activeProfile.tutorMaxTokens ?? DEFAULT_CONFIG.tutorProfiles[provider].tutorMaxTokens), 1, 4000),
+      tutorProfiles: {
+        ...baseProfiles,
+        [provider]: {
+          ...baseProfiles[provider],
+          tutorEndpoint: isSafeTutorEndpoint((activeProfile.tutorEndpoint ?? '').trim())
+            ? activeProfile.tutorEndpoint.trim()
+            : DEFAULT_CONFIG.tutorProfiles[provider].tutorEndpoint,
+          tutorApiKey: activeProfile.tutorApiKey?.trim() || '',
+          tutorApiVersion: activeProfile.tutorApiVersion?.trim() || '',
+          tutorDeploymentId: activeProfile.tutorDeploymentId?.trim() || '',
+          tutorModel: activeProfile.tutorModel?.trim() || DEFAULT_CONFIG.tutorProfiles[provider].tutorModel,
+          tutorSystemPrompt: activeProfile.tutorSystemPrompt?.trim() || DEFAULT_CONFIG.tutorProfiles[provider].tutorSystemPrompt,
+          tutorTemperature: clamp(Number(activeProfile.tutorTemperature ?? DEFAULT_CONFIG.tutorProfiles[provider].tutorTemperature), 0, 2),
+          tutorMaxTokens: clamp(Number(activeProfile.tutorMaxTokens ?? DEFAULT_CONFIG.tutorProfiles[provider].tutorMaxTokens), 1, 4000)
+        }
+      }
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -125,7 +227,21 @@ export function saveAIParamsConfig(config: AIParamsConfig): AIParamsConfig {
     tutorModel: config.tutorModel.trim() || DEFAULT_CONFIG.tutorModel,
     tutorSystemPrompt: config.tutorSystemPrompt.trim() || DEFAULT_CONFIG.tutorSystemPrompt,
     tutorTemperature: clamp(Number(config.tutorTemperature), 0, 2),
-    tutorMaxTokens: clamp(Number(config.tutorMaxTokens), 1, 4000)
+    tutorMaxTokens: clamp(Number(config.tutorMaxTokens), 1, 4000),
+    tutorProfiles: {
+      ...DEFAULT_CONFIG.tutorProfiles,
+      ...(config.tutorProfiles ?? {}),
+      [config.tutorProvider]: {
+        tutorEndpoint: isSafeTutorEndpoint(config.tutorEndpoint.trim()) ? config.tutorEndpoint.trim() : DEFAULT_CONFIG.tutorEndpoint,
+        tutorApiKey: config.tutorApiKey.trim(),
+        tutorApiVersion: config.tutorApiVersion.trim(),
+        tutorDeploymentId: config.tutorDeploymentId.trim(),
+        tutorModel: config.tutorModel.trim() || DEFAULT_CONFIG.tutorModel,
+        tutorSystemPrompt: config.tutorSystemPrompt.trim() || DEFAULT_CONFIG.tutorSystemPrompt,
+        tutorTemperature: clamp(Number(config.tutorTemperature), 0, 2),
+        tutorMaxTokens: clamp(Number(config.tutorMaxTokens), 1, 4000)
+      }
+    }
   };
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));

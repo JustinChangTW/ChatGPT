@@ -66,6 +66,7 @@ export default function AdminPage() {
   const [isQuickChecking, setIsQuickChecking] = useState(false);
   const [activeAdminTab, setActiveAdminTab] = useState<'sync' | 'api' | 'bank'>('sync');
   const [activeDataTab, setActiveDataTab] = useState<'question' | 'knowledge'>('question');
+  const [questionListPage, setQuestionListPage] = useState(1);
   const [currentHostname, setCurrentHostname] = useState('');
   const [dictionaryProviders, setDictionaryProviders] = useState<DictionaryProviderConfig[]>([]);
   const [aiParams, setAIParams] = useState<AIParamsConfig>(loadAIParamsConfig());
@@ -516,6 +517,20 @@ export default function AdminPage() {
       ),
     [bank, subdomainFilter, chapter, type]
   );
+  const QUESTION_PAGE_SIZE = 30;
+  const totalQuestionPages = Math.max(1, Math.ceil(list.length / QUESTION_PAGE_SIZE));
+  const pagedList = useMemo(() => {
+    const start = (questionListPage - 1) * QUESTION_PAGE_SIZE;
+    return list.slice(start, start + QUESTION_PAGE_SIZE);
+  }, [list, questionListPage]);
+
+  useEffect(() => {
+    setQuestionListPage(1);
+  }, [bank, subdomainFilter, chapter, type]);
+
+  useEffect(() => {
+    if (questionListPage > totalQuestionPages) setQuestionListPage(totalQuestionPages);
+  }, [questionListPage, totalQuestionPages]);
 
   const clearImported = () => {
     logAction('bank.clearImported', 'start');
@@ -1088,8 +1103,9 @@ export default function AdminPage() {
 
       {activeAdminTab === 'api' && (
         <>
-      <h2 className="text-lg font-semibold">B. 字典 API 設定（主 / 備援）</h2>
+      <h2 className="text-lg font-semibold">B. API 與 AI 參數</h2>
       <div className="rounded border bg-white p-3 text-sm">
+        <p className="text-xs text-slate-500">此分頁內容較多：已將 AI 參數改為可展開區塊，預設先顯示字典 API。</p>
         <p className="text-xs text-slate-500">
           會依下方順序嘗試字典 API（第 1 個為主，其餘為備援）。可新增其它同類型 API。URL 請使用 <code>{'{word}'}</code>。
         </p>
@@ -1145,8 +1161,8 @@ export default function AdminPage() {
           </button>
         </div>
 
-        <div className="mt-4 rounded border bg-slate-50 p-3">
-          <h3 className="text-sm font-semibold">B-2. AI 參數設定</h3>
+        <details className="mt-4 rounded border bg-slate-50 p-3">
+          <summary className="cursor-pointer text-sm font-semibold">B-2. AI 參數設定（點擊展開）</summary>
           <p className="mt-1 text-xs text-slate-500">
             可在 Admin 設定 AI 參數（翻譯與 AI 助教：模型、提示詞、溫度、Token、Endpoint、API Key）。
           </p>
@@ -1298,42 +1314,55 @@ export default function AdminPage() {
                   </select>
                 </label>
                 <label className="space-y-1">
-                  <span>助教模型</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>助教模型</span>
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-0.5 text-[11px]"
+                      onClick={() => void fetchTutorModelOptions()}
+                      disabled={isLoadingTutorModels}
+                    >
+                      {isLoadingTutorModels ? '模型清單取得中…' : '取得可用模型清單'}
+                    </button>
+                  </div>
                   <input
                     className="w-full rounded border px-2 py-1"
                     value={aiParams.tutorModel}
                     onChange={(e) => setAIParams((prev) => ({ ...prev, tutorModel: e.target.value }))}
                     placeholder="gpt-4o-mini"
+                    list="ai-tutor-model-options"
                   />
+                  <p className="text-[11px] text-slate-500">先按「取得可用模型清單」，再從下方下拉挑選，不用手打模型名。</p>
+                  {aiParams.tutorProvider === 'google_gemini' && (
+                    <p className="text-[11px] text-emerald-700">Gemini 會只列出 `supportedGenerationMethods` 含 `generateContent` 的模型。</p>
+                  )}
+                  {aiParams.tutorProvider === 'openai' && (
+                    <p className="text-[11px] text-emerald-700">OpenAI 會用 `GET /v1/models` 抓取，請從回傳 `id` 直接挑選。</p>
+                  )}
                 </label>
                 <div className="space-y-1">
-                  <span className="text-xs text-slate-600">模型清單（可先抓再選）</span>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="rounded border px-2 py-1 text-xs"
-                      onClick={() => void fetchTutorModelOptions()}
-                      disabled={isLoadingTutorModels}
-                    >
-                      {isLoadingTutorModels ? '取得中…' : '取得可用模型清單'}
-                    </button>
-                    <select
-                      className="min-w-[220px] rounded border px-2 py-1 text-xs"
-                      value=""
-                      onChange={(e) => {
-                        const picked = e.target.value;
-                        if (!picked) return;
-                        setAIParams((prev) => ({ ...prev, tutorModel: picked }));
-                      }}
-                    >
-                      <option value="">請選擇模型（不會覆蓋直到你選）</option>
-                      {availableTutorModels.map((model) => (
-                        <option key={model} value={model}>
-                          {model}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <span className="text-xs text-slate-600">可用模型下拉選擇</span>
+                  <select
+                    className="min-w-[220px] rounded border px-2 py-1 text-xs"
+                    value=""
+                    onChange={(e) => {
+                      const picked = e.target.value;
+                      if (!picked) return;
+                      setAIParams((prev) => ({ ...prev, tutorModel: picked }));
+                    }}
+                  >
+                    <option value="">請選擇模型（選了就會填到上方）</option>
+                    {availableTutorModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                  <datalist id="ai-tutor-model-options">
+                    {availableTutorModels.map((model) => (
+                      <option key={`dl-${model}`} value={model} />
+                    ))}
+                  </datalist>
                 </div>
                 <label className="space-y-1 md:col-span-2">
                   <span>API Endpoint</span>
@@ -1429,7 +1458,7 @@ export default function AdminPage() {
               儲存 AI 參數
             </button>
           </div>
-        </div>
+        </details>
       </div>
         </>
       )}
@@ -1756,14 +1785,16 @@ export default function AdminPage() {
         </>
       )}
 
-      {activeDataTab === 'question' && (
+      {activeAdminTab === 'bank' && activeDataTab === 'question' && (
       <div className="rounded border bg-white p-4 text-sm">
         <div className="mb-2 flex items-center justify-between">
           <p className="font-semibold">題目列表（{list.length}）</p>
-          <p className="text-xs text-slate-500">改為卡片資訊層級：題號/章節/Domain/Subdomain/型態</p>
+          <p className="text-xs text-slate-500">
+            第 {questionListPage} / {totalQuestionPages} 頁（每頁 {QUESTION_PAGE_SIZE} 筆）
+          </p>
         </div>
         <ul className="space-y-2">
-          {list.map((q) => (
+          {pagedList.map((q) => (
             <li key={q.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               {(() => {
                 const meta = parseImportMeta(q);
@@ -1790,6 +1821,25 @@ export default function AdminPage() {
             </li>
           ))}
         </ul>
+        {pagedList.length === 0 && <p className="text-xs text-slate-500">目前沒有符合篩選條件的題目。</p>}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="rounded border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={questionListPage <= 1}
+            onClick={() => setQuestionListPage((prev) => Math.max(1, prev - 1))}
+          >
+            上一頁
+          </button>
+          <button
+            type="button"
+            className="rounded border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={questionListPage >= totalQuestionPages}
+            onClick={() => setQuestionListPage((prev) => Math.min(totalQuestionPages, prev + 1))}
+          >
+            下一頁
+          </button>
+        </div>
       </div>
       )}
     </div>

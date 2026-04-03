@@ -17,6 +17,13 @@ import { loadCustomKeywords, saveCustomKeywords } from '@/lib/services/custom-ke
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
 
+const isQuestionCorrect = (q: Question, userAnswer: string | string[] | undefined) =>
+  Array.isArray(q.correctAnswer)
+    ? Array.isArray(userAnswer) &&
+      q.correctAnswer.length === userAnswer.length &&
+      q.correctAnswer.every((x) => userAnswer.includes(x))
+    : userAnswer === q.correctAnswer;
+
 export default function ChapterPracticePage() {
   const [bank, setBank] = useState<Question[]>(sampleQuestions);
   const [progress, setProgress] = useState(loadChapterProgress());
@@ -41,6 +48,7 @@ export default function ChapterPracticePage() {
   const [practiceMode, setPracticeMode] = useState<'single' | 'list'>('single');
   const [customKeywordsByQuestion, setCustomKeywordsByQuestion] = useState<Record<string, DictionaryEntry[]>>({});
   const [notesByQuestion, setNotesByQuestion] = useState<Record<string, string>>({});
+  const [revealedByQuestion, setRevealedByQuestion] = useState<Record<string, boolean>>({});
   const [showNotePreview, setShowNotePreview] = useState(false);
   const [showAssistPanel, setShowAssistPanel] = useState(false);
   const questionPanelRef = useRef<HTMLDivElement | null>(null);
@@ -70,11 +78,7 @@ export default function ChapterPracticePage() {
     if (questions.length === 0) return null;
     const detail = questions.map((q) => {
       const userAnswer = answers[q.id];
-      const correct = Array.isArray(q.correctAnswer)
-        ? Array.isArray(userAnswer) &&
-          q.correctAnswer.length === userAnswer.length &&
-          q.correctAnswer.every((x) => userAnswer.includes(x))
-        : userAnswer === q.correctAnswer;
+      const correct = isQuestionCorrect(q, userAnswer);
       return { question: q, userAnswer, correct };
     });
     const correctCount = detail.filter((x) => x.correct).length;
@@ -124,6 +128,8 @@ export default function ChapterPracticePage() {
     const qs = await assembleChapterPractice(bank, selectedChapter);
     setSession({ sessionId: `chapter-${Date.now()}`, questions: qs });
     setSubmitted(false);
+    setRevealedByQuestion({});
+    setShowAssistPanel(false);
   };
 
   const submitPractice = () => {
@@ -297,9 +303,25 @@ export default function ChapterPracticePage() {
   };
 
   const currentNote = current ? notesByQuestion[current.id] ?? '' : '';
+  const currentUserAnswer = current ? answers[current.id] : undefined;
+  const currentRevealed = current ? !!revealedByQuestion[current.id] : false;
+  const currentIsAnswered = currentUserAnswer !== undefined && currentUserAnswer !== '';
+  const currentIsCorrect = current ? isQuestionCorrect(current, currentUserAnswer) : false;
+  const currentCorrectAnswer = current
+    ? (Array.isArray(current.correctAnswer) ? current.correctAnswer.join(', ') : current.correctAnswer)
+    : '';
   const updateCurrentNote = (content: string) => {
     if (!current) return;
     setNotesByQuestion((prev) => ({ ...prev, [current.id]: content }));
+  };
+
+  const answerCurrentQuestion = (optionKey: string) => {
+    if (!current) return;
+    setAnswer(current.id, optionKey);
+    if (practiceMode === 'single') {
+      setRevealedByQuestion((prev) => ({ ...prev, [current.id]: true }));
+      setShowAssistPanel(true);
+    }
   };
 
   const applyMarkdownSyntax = (syntax: 'bold' | 'h2' | 'bullet' | 'code') => {
@@ -362,7 +384,7 @@ export default function ChapterPracticePage() {
             onClick={() => setPracticeMode('single')}
             className={`rounded px-3 py-1.5 ${practiceMode === 'single' ? 'bg-slate-900 text-white' : 'border bg-white'}`}
           >
-            逐題模式（專注作答）
+            逐題即時覆盤（作答後立刻看答案）
           </button>
           <button
             type="button"
@@ -380,7 +402,9 @@ export default function ChapterPracticePage() {
           <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-blue-100">
             <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${sessionProgressPercent}%` }} />
           </div>
-          <p className="mt-2 text-[11px] text-blue-700">作答中僅顯示當前章節，避免視覺干擾；交卷後會寫回章節總覽統計。</p>
+          <p className="mt-2 text-[11px] text-blue-700">
+            逐題即時覆盤：每題作答後立刻顯示正解與詳解，可馬上補筆記；清單模式仍保留一次看全部。
+          </p>
         </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -471,15 +495,30 @@ export default function ChapterPracticePage() {
                 }`}
                 key={opt.key}
               >
-                <input type="radio" className="mr-2" name={current.id} checked={answers[current.id] === opt.key} onChange={() => setAnswer(current.id, opt.key)} />
+                <input type="radio" className="mr-2" name={current.id} checked={answers[current.id] === opt.key} onChange={() => answerCurrentQuestion(opt.key)} />
                 <span className="font-medium">{opt.key}.</span>{' '}
                 <span className="whitespace-pre-line leading-7">{renderKeywordMixedText(opt.text)}</span>
               </label>
             ))}
           </div>
+          {currentRevealed && (
+            <div className={`mt-3 rounded-lg border p-3 text-sm ${currentIsCorrect ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'}`}>
+              <p className="font-semibold">{currentIsCorrect ? '✅ 本題答對' : '❌ 本題答錯'}</p>
+              <p className="mt-1">你的答案：{Array.isArray(currentUserAnswer) ? currentUserAnswer.join(', ') : currentUserAnswer ?? '未作答'}</p>
+              <p className="mt-1">正確答案：{currentCorrectAnswer}</p>
+              <p className="mt-2 whitespace-pre-line leading-7">詳解：{current.explanation}</p>
+              <p className="mt-2 text-xs text-slate-600">建議：先看完詳解，再在下方「本題筆記」補 1-2 行重點再進下一題。</p>
+            </div>
+          )}
           <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
             <button className="rounded border px-3 py-2" onClick={prev}>上一題</button>
-            <button className="rounded border px-3 py-2" onClick={next}>下一題</button>
+            <button
+              className="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={next}
+              disabled={!currentIsAnswered}
+            >
+              下一題
+            </button>
             <button className="rounded bg-emerald-600 px-3 py-2 text-white" onClick={submitPractice}>交卷看結果</button>
             <p className="self-center text-sm text-slate-500 sm:ml-1">已作答 {answeredCount}/{questions.length}</p>
           </div>

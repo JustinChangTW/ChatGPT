@@ -120,8 +120,9 @@ const adapters: Record<AIParamsConfig['tutorProvider'], ProviderAdapter> = {
   },
   google_gemini: {
     buildRequest: (cfg, prompt) => {
+      const modelId = cfg.tutorModel.replace(/^models\//, '');
       const base = cfg.tutorEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}';
-      const url = base.replace('{model}', encodeURIComponent(cfg.tutorModel)).replace('{apiKey}', encodeURIComponent(cfg.tutorApiKey));
+      const url = base.replace('{model}', encodeURIComponent(modelId)).replace('{apiKey}', encodeURIComponent(cfg.tutorApiKey));
       return {
         url,
         init: {
@@ -236,17 +237,23 @@ export async function listAvailableTutorModels(): Promise<{ ok: boolean; models:
   }
   try {
     if (cfg.tutorProvider === 'google_gemini') {
-      const endpoint = (cfg.tutorEndpoint || 'https://generativelanguage.googleapis.com/v1beta/models?key={apiKey}')
-        .replace('{model}:generateContent', '')
-        .replace('{apiKey}', encodeURIComponent(cfg.tutorApiKey));
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cfg.tutorApiKey)}`;
       const res = await fetch(endpoint);
       if (!res.ok) return { ok: false, models: [], error: `HTTP ${res.status}` };
-      const payload = (await res.json()) as { models?: Array<{ name?: string }> };
-      const models = (payload.models ?? []).map((x) => x.name?.replace('models/', '') || '').filter(Boolean);
+      const payload = (await res.json()) as {
+        models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+      };
+      const models = (payload.models ?? [])
+        .filter((x) => (x.supportedGenerationMethods ?? []).includes('generateContent'))
+        .map((x) => x.name?.replace('models/', '') || '')
+        .filter((name) => !!name && /gemini/i.test(name));
       return { ok: true, models: Array.from(new Set(models)).sort() };
     }
 
     const buildModelsEndpoint = () => {
+      if (cfg.tutorProvider === 'openai') {
+        return 'https://api.openai.com/v1/models';
+      }
       if (cfg.tutorProvider === 'azure_openai') {
         const ep = (cfg.tutorEndpoint || '').replace(/\/$/, '');
         const apiVersion = cfg.tutorApiVersion || '2024-10-21';
@@ -276,8 +283,11 @@ export async function listAvailableTutorModels(): Promise<{ ok: boolean; models:
       }
       return { ok: false, models: [], error: `HTTP ${res.status}：${readableApiError(detail)}` };
     }
-    const payload = (await res.json()) as { data?: Array<{ id?: string }> };
-    const models = (payload.data ?? []).map((x) => x.id || '').filter(Boolean);
+    const payload = (await res.json()) as { data?: Array<{ id?: string; object?: string; owned_by?: string }> };
+    const models = (payload.data ?? [])
+      .filter((x) => (cfg.tutorProvider === 'openai' ? x.object === 'model' : true))
+      .map((x) => x.id || '')
+      .filter(Boolean);
     return { ok: true, models: Array.from(new Set(models)).sort() };
   } catch (err) {
     return { ok: false, models: [], error: err instanceof Error ? err.message : String(err) };
