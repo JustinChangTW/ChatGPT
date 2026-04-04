@@ -33,14 +33,31 @@ export default function WrongNotebookPage() {
 
   const enriched = useMemo(() => wrongRows.map((r) => {
     const question = questionPool.get(r.questionId);
+    const correctCount = r.correctCount ?? 0;
+    const wrongCount = r.wrongCount ?? 0;
+    const attempts = wrongCount + correctCount;
     return {
       ...r,
       chapter: question?.chapter ?? '-',
       domain: question?.domain ?? '-',
       questionType: question?.questionType ?? 'theory',
-      question
+      question,
+      attempts,
+      correctCount,
+      wrongCount,
+      wrongRate: attempts > 0 ? Math.round((wrongCount / attempts) * 100) : 0,
+      stemPreview: question?.stem?.slice(0, 48) ?? '(無題目內容)'
     };
   }), [wrongRows, questionPool]);
+  const summary = useMemo(() => {
+    if (enriched.length === 0) return { totalQuestions: 0, totalAttempts: 0, totalWrong: 0, totalCorrect: 0 };
+    return {
+      totalQuestions: enriched.length,
+      totalAttempts: enriched.reduce((acc, r) => acc + r.attempts, 0),
+      totalWrong: enriched.reduce((acc, r) => acc + r.wrongCount, 0),
+      totalCorrect: enriched.reduce((acc, r) => acc + r.correctCount, 0)
+    };
+  }, [enriched]);
   const keywordHintsByQuestion = useMemo(() => {
     const dictTerms = new Set(getBuiltinDictionaryTerms());
     const map: Record<string, { term: string; translation: string }[]> = {};
@@ -48,12 +65,18 @@ export default function WrongNotebookPage() {
       if (!row.question) return;
       const text = [row.question.stem, ...row.question.options.map((o) => o.text)].join(' ');
       const tokens = text.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
-      const terms = Array.from(new Set(tokens.map((x) => x.toLowerCase()).filter((x) => dictTerms.has(x))));
+      const termsFromText = tokens.map((x) => x.toLowerCase()).filter((x) => dictTerms.has(x));
+      const termsFromQuestionKeywords = (row.question.keywords ?? []).map((x) => x.toLowerCase());
+      const terms = Array.from(new Set([...termsFromQuestionKeywords, ...termsFromText]));
       map[row.questionId] = terms
-        .map((term) => lookupDictionaryTerm(term))
-        .filter((x): x is NonNullable<typeof x> => !!x)
-        .map((entry) => ({ term: entry.term, translation: entry.translation }))
-        .slice(0, 10);
+        .map((term) => {
+          const entry = lookupDictionaryTerm(term);
+          if (entry) return { term: entry.term, translation: entry.translation };
+          if (!dictTerms.has(term)) return { term, translation: '（無內建翻譯）' };
+          return null;
+        })
+        .filter((x): x is { term: string; translation: string } => !!x)
+        .slice(0, 8);
     });
     return map;
   }, [enriched]);
@@ -126,13 +149,36 @@ export default function WrongNotebookPage() {
       <p className="text-sm text-slate-500">
         可展開題目內容、查看詳解，並與 AI 助教互動追問。
       </p>
+      {enriched.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-4">
+          <div className="rounded border bg-white p-3 text-sm">
+            <p className="text-xs text-slate-500">題目數</p>
+            <p className="text-xl font-semibold">{summary.totalQuestions}</p>
+          </div>
+          <div className="rounded border bg-white p-3 text-sm">
+            <p className="text-xs text-slate-500">總作答次數</p>
+            <p className="text-xl font-semibold">{summary.totalAttempts}</p>
+          </div>
+          <div className="rounded border bg-rose-50 p-3 text-sm">
+            <p className="text-xs text-rose-700">總答錯次數</p>
+            <p className="text-xl font-semibold text-rose-700">{summary.totalWrong}</p>
+          </div>
+          <div className="rounded border bg-emerald-50 p-3 text-sm">
+            <p className="text-xs text-emerald-700">總答對次數</p>
+            <p className="text-xl font-semibold text-emerald-700">{summary.totalCorrect}</p>
+          </div>
+        </div>
+      )}
       {enriched.length === 0 ? <p className="rounded border bg-white p-3 text-sm">目前沒有錯題紀錄。先去章節練習作答後，這裡會自動累積。</p> : null}
 
       <div className="space-y-2 md:hidden">
         {enriched.map((r) => (
           <div key={`mobile-${r.questionId}`} className="rounded border bg-white p-3 text-sm">
             <p className="font-semibold break-all">{r.questionId}</p>
-            <p className="mt-1 text-slate-600">錯誤次數：{r.wrongCount}</p>
+            <p className="mt-1 text-slate-600">作答次數：{r.attempts}</p>
+            <p className="text-slate-600">錯誤次數：{r.wrongCount}</p>
+            <p className="text-slate-600">答對次數：{r.correctCount}</p>
+            <p className="text-slate-600">錯誤率：{r.wrongRate}%</p>
             <p className="text-slate-600">章節：{r.chapter}</p>
             <p className="text-slate-600">領域：{r.domain}</p>
             <p className="text-slate-600">題型：{r.questionType ?? '-'}</p>
@@ -148,8 +194,11 @@ export default function WrongNotebookPage() {
         <table className="min-w-full text-sm">
           <thead className="bg-slate-100 text-left">
             <tr>
-              <th className="p-2">Question</th>
+              <th className="p-2">Question（題號 / 摘要）</th>
+              <th className="p-2">Attempts</th>
               <th className="p-2">Wrong</th>
+              <th className="p-2">Correct</th>
+              <th className="p-2">Wrong%</th>
               <th className="p-2">Chapter</th>
               <th className="p-2">Domain</th>
               <th className="p-2">Type</th>
@@ -160,8 +209,14 @@ export default function WrongNotebookPage() {
           <tbody>
             {enriched.map((r) => (
               <tr key={r.questionId} className="border-t">
-                <td className="p-2">{r.questionId}</td>
+                <td className="p-2">
+                  <p className="font-mono text-xs">{r.questionId}</p>
+                  <p className="mt-1 text-xs text-slate-600">{r.stemPreview}{r.stemPreview === '(無題目內容)' ? '' : '…'}</p>
+                </td>
+                <td className="p-2">{r.attempts}</td>
                 <td className="p-2">{r.wrongCount}</td>
+                <td className="p-2">{r.correctCount}</td>
+                <td className="p-2">{r.wrongRate}%</td>
                 <td className="p-2">{r.chapter}</td>
                 <td className="p-2">{r.domain}</td>
                 <td className="p-2">{r.questionType ?? '-'}</td>

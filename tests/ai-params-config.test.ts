@@ -8,6 +8,7 @@ describe('ai params config storage', () => {
     expect(defaults.translationEndpoint).toContain('{text}');
 
     const saved = saveAIParamsConfig({
+      ...defaults,
       enabled: true,
       model: 'custom-model',
       temperature: 9,
