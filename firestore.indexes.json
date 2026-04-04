@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "wrongAnswers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "wrongCount", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "practiceAttempts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
