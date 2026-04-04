@@ -328,7 +328,7 @@ export default function WrongNotebookPage() {
     if (!isResizingDrawer) return;
     const handleMove = (event: MouseEvent) => {
       const viewport = window.innerWidth;
-      const next = Math.min(Math.max(viewport - event.clientX, 420), Math.min(1100, viewport - 24));
+      const next = Math.min(Math.max(viewport - event.clientX, 420), viewport);
       setDrawerWidth(next);
     };
     const handleUp = () => setIsResizingDrawer(false);
@@ -489,7 +489,7 @@ export default function WrongNotebookPage() {
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerWidth(760)}>中</button>
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerWidth(980)}>最大</button>
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerViewportRatio(0.9)}>90%</button>
-                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerViewportRatio(0.98)}>100%</button>
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerViewportRatio(1)}>100%</button>
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerOpen(false)}>關閉</button>
                     </div>
                     {detailBlock}
