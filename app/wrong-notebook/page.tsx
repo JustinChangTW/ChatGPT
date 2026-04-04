@@ -12,6 +12,8 @@ import { loadCustomKeywords } from '@/lib/services/custom-keyword-storage';
 import { auth } from '@/lib/firebase/client';
 import { getBuiltinDictionaryTerms, lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
 
+const NOTEBOOK_UI_PREFS_KEY = 'cct_wrong_notebook_ui_prefs_v1';
+
 type NotebookRowVM = {
   id: string;
   questionId: string;
@@ -312,6 +314,34 @@ export default function WrongNotebookPage() {
   useEffect(() => {
     setCustomKeywordsByQuestion(loadCustomKeywords());
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(NOTEBOOK_UI_PREFS_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        layoutMode?: 'splitList' | 'splitBalanced' | 'splitDetail' | 'stacked' | 'drawer';
+        detailPanelPercent?: number;
+        drawerWidth?: number;
+        sortBy?: 'wrongRate' | 'wrongCount' | 'attempts' | 'recent';
+      };
+      if (parsed.layoutMode) setLayoutMode(parsed.layoutMode);
+      if (typeof parsed.detailPanelPercent === 'number') setDetailPanelPercent(parsed.detailPanelPercent);
+      if (typeof parsed.drawerWidth === 'number') setDrawerWidth(parsed.drawerWidth);
+      if (parsed.sortBy) setSortBy(parsed.sortBy);
+    } catch {
+      // ignore broken persisted prefs
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      NOTEBOOK_UI_PREFS_KEY,
+      JSON.stringify({ layoutMode, detailPanelPercent, drawerWidth, sortBy })
+    );
+  }, [layoutMode, detailPanelPercent, drawerWidth, sortBy]);
 
   useEffect(() => {
     if (!selectedId) return;
