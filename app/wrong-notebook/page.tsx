@@ -56,12 +56,15 @@ export default function WrongNotebookPage() {
     };
   }), [wrongRows, questionPool]);
   const summary = useMemo(() => {
-    if (enriched.length === 0) return { totalQuestions: 0, totalAttempts: 0, totalWrong: 0, totalCorrect: 0 };
+    if (enriched.length === 0) return { totalQuestions: 0, totalAttempts: 0, totalWrong: 0, totalCorrect: 0, overallWrongRate: 0 };
+    const totalAttempts = enriched.reduce((acc, r) => acc + r.attempts, 0);
+    const totalWrong = enriched.reduce((acc, r) => acc + r.wrongCount, 0);
     return {
       totalQuestions: enriched.length,
-      totalAttempts: enriched.reduce((acc, r) => acc + r.attempts, 0),
-      totalWrong: enriched.reduce((acc, r) => acc + r.wrongCount, 0),
-      totalCorrect: enriched.reduce((acc, r) => acc + r.correctCount, 0)
+      totalAttempts,
+      totalWrong,
+      totalCorrect: enriched.reduce((acc, r) => acc + r.correctCount, 0),
+      overallWrongRate: totalAttempts > 0 ? Math.round((totalWrong / totalAttempts) * 100) : 0
     };
   }, [enriched]);
   const keywordHintsByQuestion = useMemo(() => {
@@ -180,22 +183,15 @@ export default function WrongNotebookPage() {
         可展開題目內容、查看詳解，並與 AI 助教互動追問。
       </p>
       {enriched.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2">
           <div className="rounded border bg-white p-3 text-sm">
             <p className="text-xs text-slate-500">題目數</p>
             <p className="text-xl font-semibold">{summary.totalQuestions}</p>
           </div>
-          <div className="rounded border bg-white p-3 text-sm">
-            <p className="text-xs text-slate-500">總作答次數</p>
-            <p className="text-xl font-semibold">{summary.totalAttempts}</p>
-          </div>
           <div className="rounded border bg-rose-50 p-3 text-sm">
-            <p className="text-xs text-rose-700">總答錯次數</p>
-            <p className="text-xl font-semibold text-rose-700">{summary.totalWrong}</p>
-          </div>
-          <div className="rounded border bg-emerald-50 p-3 text-sm">
-            <p className="text-xs text-emerald-700">總答對次數</p>
-            <p className="text-xl font-semibold text-emerald-700">{summary.totalCorrect}</p>
+            <p className="text-xs text-rose-700">整體錯誤率</p>
+            <p className="text-xl font-semibold text-rose-700">{summary.overallWrongRate}%</p>
+            <p className="text-xs text-rose-700">（{summary.totalWrong}/{summary.totalAttempts}）</p>
           </div>
         </div>
       )}
@@ -206,13 +202,8 @@ export default function WrongNotebookPage() {
           <div key={`mobile-${r.questionId}`} className="rounded border bg-white p-3 text-sm">
             <p className="font-semibold break-all">{r.questionId}</p>
             <p className="mt-1 text-slate-600">作答次數：{r.attempts}</p>
-            <p className="text-slate-600">錯誤次數：{r.wrongCount}</p>
-            <p className="text-slate-600">答對次數：{r.correctCount}</p>
             <p className="text-slate-600">錯誤率：{r.wrongRate}%</p>
             <p className="text-slate-600">章節：{r.chapter}</p>
-            <p className="text-slate-600">領域：{r.domain}</p>
-            <p className="text-slate-600">題型：{r.questionType ?? '-'}</p>
-            <p className="text-slate-600">已掌握：{String(r.mastered)}</p>
             <button className="mt-2 w-full rounded border px-2 py-2" onClick={() => setOpenedId((x) => (x === r.questionId ? null : r.questionId))}>
               {openedId === r.questionId ? '收合' : '開啟'}
             </button>
@@ -226,13 +217,8 @@ export default function WrongNotebookPage() {
             <tr>
               <th className="p-2">Question（題號 / 摘要）</th>
               <th className="p-2">Attempts</th>
-              <th className="p-2">Wrong</th>
-              <th className="p-2">Correct</th>
               <th className="p-2">Wrong%</th>
               <th className="p-2">Chapter</th>
-              <th className="p-2">Domain</th>
-              <th className="p-2">Type</th>
-              <th className="p-2">Mastered</th>
               <th className="p-2">操作</th>
             </tr>
           </thead>
@@ -244,13 +230,8 @@ export default function WrongNotebookPage() {
                   <p className="mt-1 text-xs text-slate-600">{r.stemPreview}{r.stemPreview === '(無題目內容)' ? '' : '…'}</p>
                 </td>
                 <td className="p-2">{r.attempts}</td>
-                <td className="p-2">{r.wrongCount}</td>
-                <td className="p-2">{r.correctCount}</td>
                 <td className="p-2">{r.wrongRate}%</td>
                 <td className="p-2">{r.chapter}</td>
-                <td className="p-2">{r.domain}</td>
-                <td className="p-2">{r.questionType ?? '-'}</td>
-                <td className="p-2">{String(r.mastered)}</td>
                 <td className="p-2">
                   <button className="rounded border px-2 py-1" onClick={() => setOpenedId((x) => (x === r.questionId ? null : r.questionId))}>
                     {openedId === r.questionId ? '收合' : '開啟'}
@@ -287,6 +268,7 @@ export default function WrongNotebookPage() {
                   正確答案：{Array.isArray(q.correctAnswer) ? q.correctAnswer.join(', ') : q.correctAnswer}
                 </p>
                 <p className="text-sm">詳解：{q.explanation}</p>
+                <p className="text-xs text-slate-500">補充資訊：領域 {row.domain} / 題型 {row.questionType ?? '-'} / 已掌握 {String(row.mastered)}</p>
                 <div className="rounded border bg-amber-50 p-3 text-sm">
                   <p className="font-semibold text-amber-900">關鍵字提示</p>
                   {keywordHints.length === 0 ? (
