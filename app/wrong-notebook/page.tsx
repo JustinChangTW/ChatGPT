@@ -8,6 +8,7 @@ import { requestAITutorReplyDebug } from '@/lib/services/ai-tutor-client';
 import { loadSharedQuestionNote } from '@/lib/services/shared-question-notes';
 import { loadPrivateQuestionNote } from '@/lib/services/private-question-notes';
 import { auth } from '@/lib/firebase/client';
+import { getBuiltinDictionaryTerms, lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
 
 function aiTutorReply(question: string, explanation: string, history: { role: 'user' | 'assistant'; text: string }[]): string {
   const latest = history[history.length - 1]?.text ?? '';
@@ -40,6 +41,22 @@ export default function WrongNotebookPage() {
       question
     };
   }), [wrongRows, questionPool]);
+  const keywordHintsByQuestion = useMemo(() => {
+    const dictTerms = new Set(getBuiltinDictionaryTerms());
+    const map: Record<string, { term: string; translation: string }[]> = {};
+    enriched.forEach((row) => {
+      if (!row.question) return;
+      const text = [row.question.stem, ...row.question.options.map((o) => o.text)].join(' ');
+      const tokens = text.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
+      const terms = Array.from(new Set(tokens.map((x) => x.toLowerCase()).filter((x) => dictTerms.has(x))));
+      map[row.questionId] = terms
+        .map((term) => lookupDictionaryTerm(term))
+        .filter((x): x is NonNullable<typeof x> => !!x)
+        .map((entry) => ({ term: entry.term, translation: entry.translation }))
+        .slice(0, 10);
+    });
+    return map;
+  }, [enriched]);
 
   const sendAsk = async (questionId: string, stem: string, explanation: string) => {
     const userText = (askByQuestion[questionId] ?? '').trim();
@@ -170,6 +187,7 @@ export default function WrongNotebookPage() {
             const aiError = aiErrorByQuestion[openedId] ?? '';
             const sharedNote = notesByQuestion[openedId]?.shared ?? '';
             const privateNote = notesByQuestion[openedId]?.private ?? '';
+            const keywordHints = keywordHintsByQuestion[openedId] ?? [];
             return (
               <div className="space-y-3">
                 <h2 className="text-lg font-semibold">{q.stem}</h2>
@@ -184,6 +202,24 @@ export default function WrongNotebookPage() {
                   正確答案：{Array.isArray(q.correctAnswer) ? q.correctAnswer.join(', ') : q.correctAnswer}
                 </p>
                 <p className="text-sm">詳解：{q.explanation}</p>
+                <div className="rounded border bg-amber-50 p-3 text-sm">
+                  <p className="font-semibold text-amber-900">關鍵字提示</p>
+                  {keywordHints.length === 0 ? (
+                    <p className="mt-1 text-xs text-amber-800">此題尚無可提示的內建關鍵字。</p>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {keywordHints.map((entry) => (
+                        <span
+                          key={entry.term}
+                          className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-xs text-amber-900"
+                          title={entry.translation}
+                        >
+                          {entry.term} · {entry.translation}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <div className="rounded border bg-slate-50 p-3 text-sm">
                   <p className="font-semibold">題目筆記</p>
