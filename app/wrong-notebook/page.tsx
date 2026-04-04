@@ -7,6 +7,7 @@ import { loadWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 import { requestAITutorReplyDebug } from '@/lib/services/ai-tutor-client';
 import { loadSharedQuestionNote } from '@/lib/services/shared-question-notes';
 import { loadPrivateQuestionNote } from '@/lib/services/private-question-notes';
+import { loadCustomKeywords } from '@/lib/services/custom-keyword-storage';
 import { auth } from '@/lib/firebase/client';
 import { getBuiltinDictionaryTerms, lookupDictionaryTerm } from '@/lib/services/inline-dictionary';
 
@@ -27,6 +28,7 @@ export default function WrongNotebookPage() {
   const [chat, setChat] = useState<Record<string, { role: 'user' | 'assistant'; text: string }[]>>({});
   const [wrongRows] = useState(() => loadWrongNotebook());
   const [notesByQuestion, setNotesByQuestion] = useState<Record<string, { shared: string; private: string }>>({});
+  const [customKeywordsByQuestion, setCustomKeywordsByQuestion] = useState(() => loadCustomKeywords());
   const currentUserId = auth?.currentUser?.uid ?? 'local-user';
 
   const questionPool = useMemo(() => {
@@ -70,20 +72,27 @@ export default function WrongNotebookPage() {
       const text = [row.question.stem, ...row.question.options.map((o) => o.text)].join(' ');
       const tokens = text.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
       const termsFromText = tokens.map((x) => x.toLowerCase()).filter((x) => dictTerms.has(x));
-      const termsFromQuestionKeywords = (row.question.keywords ?? []).map((x) => x.toLowerCase());
-      const terms = Array.from(new Set([...termsFromQuestionKeywords, ...termsFromText]));
-      map[row.questionId] = terms
+      const suggestedEntries = Array.from(new Set(termsFromText))
         .map((term) => {
           const entry = lookupDictionaryTerm(term);
           if (entry) return { term: entry.term, translation: entry.translation };
-          if (!dictTerms.has(term)) return { term, translation: '' };
           return null;
         })
-        .filter((x): x is { term: string; translation: string } => !!x)
-        .slice(0, 8);
+        .filter((x): x is { term: string; translation: string } => !!x);
+      const customEntries = (customKeywordsByQuestion[row.questionId] ?? []).map((entry) => ({
+        term: entry.term,
+        translation: entry.translation ?? ''
+      }));
+      const mergedMap = new Map<string, { term: string; translation: string }>();
+      [...suggestedEntries, ...customEntries].forEach((entry) => mergedMap.set(entry.term.toLowerCase(), entry));
+      map[row.questionId] = Array.from(mergedMap.values()).slice(0, 8);
     });
     return map;
-  }, [enriched]);
+  }, [enriched, customKeywordsByQuestion]);
+
+  useEffect(() => {
+    setCustomKeywordsByQuestion(loadCustomKeywords());
+  }, []);
 
   const sendAsk = async (questionId: string, stem: string, explanation: string) => {
     const userText = (askByQuestion[questionId] ?? '').trim();

@@ -10,6 +10,8 @@ import {
   updateVocabularyEntry
 } from '@/lib/services/vocabulary-storage';
 import { fetchRealtimeTranslation } from '@/lib/services/realtime-translation';
+import { DictionaryEntry } from '@/lib/services/inline-dictionary';
+import { loadCustomKeywords, saveCustomKeywords } from '@/lib/services/custom-keyword-storage';
 
 const PROFICIENCY_OPTIONS: Array<{ value: VocabularyEntry['proficiencyLevel']; label: string; hint: string }> = [
   { value: 'new', label: 'Lv0 新字', hint: '剛加入，幾乎不熟' },
@@ -18,8 +20,12 @@ const PROFICIENCY_OPTIONS: Array<{ value: VocabularyEntry['proficiencyLevel']; l
   { value: 'mastered', label: 'Lv3 精通', hint: '可穩定理解與使用' }
 ];
 
+type KeywordRow = DictionaryEntry & { questionId: string; index: number };
+
 export default function VocabularyPage() {
+  const [activeTab, setActiveTab] = useState<'vocabulary' | 'keywords'>('vocabulary');
   const [entries, setEntries] = useState<VocabularyEntry[]>([]);
+  const [customKeywordsByQuestion, setCustomKeywordsByQuestion] = useState<Record<string, DictionaryEntry[]>>({});
   const [reviewIndex, setReviewIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -31,6 +37,7 @@ export default function VocabularyPage() {
 
   useEffect(() => {
     setEntries(loadVocabularyBank());
+    setCustomKeywordsByQuestion(loadCustomKeywords());
   }, []);
 
   const reviewList = useMemo(
@@ -38,16 +45,35 @@ export default function VocabularyPage() {
     [entries]
   );
   const current = reviewList[reviewIndex] ?? null;
+  const keywordRows = useMemo<KeywordRow[]>(
+    () =>
+      Object.entries(customKeywordsByQuestion).flatMap(([questionId, list]) =>
+        list.map((entry, index) => ({ questionId, index, ...entry }))
+      ),
+    [customKeywordsByQuestion]
+  );
+  const currentKeyword = keywordRows[reviewIndex] ?? null;
 
   const nextCard = () => {
-    if (reviewList.length === 0) return;
-    setReviewIndex((idx) => (idx + 1) % reviewList.length);
+    const listLength = activeTab === 'vocabulary' ? reviewList.length : keywordRows.length;
+    if (listLength === 0) return;
+    setReviewIndex((idx) => (idx + 1) % listLength);
     setRevealed(false);
   };
 
   const deleteEntry = (id: string) => {
     const next = removeVocabularyEntry(id);
     setEntries(next);
+    setReviewIndex(0);
+    setRevealed(false);
+  };
+
+  const deleteKeywordEntry = (questionId: string, targetTerm: string) => {
+    const next = { ...customKeywordsByQuestion };
+    next[questionId] = (next[questionId] ?? []).filter((entry) => entry.term.toLowerCase() !== targetTerm.toLowerCase());
+    if (next[questionId].length === 0) delete next[questionId];
+    saveCustomKeywords(next);
+    setCustomKeywordsByQuestion(next);
     setReviewIndex(0);
     setRevealed(false);
   };
@@ -59,6 +85,14 @@ export default function VocabularyPage() {
     setRevealed(false);
   };
 
+  const clearAllKeywords = () => {
+    const next: Record<string, DictionaryEntry[]> = {};
+    saveCustomKeywords(next);
+    setCustomKeywordsByQuestion(next);
+    setReviewIndex(0);
+    setRevealed(false);
+  };
+
   const updateLevel = (id: string, level: VocabularyEntry['proficiencyLevel']) => {
     const next = setVocabularyProficiency(id, level);
     setEntries(next);
@@ -66,6 +100,13 @@ export default function VocabularyPage() {
 
   const startEdit = (entry: VocabularyEntry) => {
     setEditingId(entry.id);
+    setEditTerm(entry.term);
+    setEditTranslation(entry.translation);
+    setEditDefinition(entry.definition);
+  };
+
+  const startEditKeyword = (entry: KeywordRow) => {
+    setEditingId(`${entry.questionId}::${entry.term.toLowerCase()}`);
     setEditTerm(entry.term);
     setEditTranslation(entry.translation);
     setEditDefinition(entry.definition);
@@ -86,6 +127,24 @@ export default function VocabularyPage() {
       definition: editDefinition || '（尚未填寫）'
     });
     setEntries(next);
+    cancelEdit();
+  };
+
+  const saveKeywordEdit = (questionId: string, originalTerm: string) => {
+    if (!editTerm.trim()) return;
+    const next = { ...customKeywordsByQuestion };
+    next[questionId] = (next[questionId] ?? []).map((entry) =>
+      entry.term.toLowerCase() === originalTerm.toLowerCase()
+        ? {
+            ...entry,
+            term: editTerm.trim(),
+            translation: editTranslation || '（尚未填寫）',
+            definition: editDefinition || '（尚未填寫）'
+          }
+        : entry
+    );
+    saveCustomKeywords(next);
+    setCustomKeywordsByQuestion(next);
     cancelEdit();
   };
 
@@ -132,20 +191,44 @@ export default function VocabularyPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">單字管理與複習</h1>
-        <button
-          type="button"
-          onClick={clearAll}
-          className="rounded border border-rose-300 bg-rose-50 px-3 py-1 text-sm text-rose-700 hover:bg-rose-100"
-          disabled={entries.length === 0}
-        >
-          清空單字庫
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('vocabulary');
+              setReviewIndex(0);
+              setRevealed(false);
+            }}
+            className={`rounded border px-3 py-1 text-sm ${activeTab === 'vocabulary' ? 'bg-slate-900 text-white' : 'hover:bg-slate-50'}`}
+          >
+            單字
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('keywords');
+              setReviewIndex(0);
+              setRevealed(false);
+            }}
+            className={`rounded border px-3 py-1 text-sm ${activeTab === 'keywords' ? 'bg-slate-900 text-white' : 'hover:bg-slate-50'}`}
+          >
+            關鍵字
+          </button>
+          <button
+            type="button"
+            onClick={activeTab === 'vocabulary' ? clearAll : clearAllKeywords}
+            className="rounded border border-rose-300 bg-rose-50 px-3 py-1 text-sm text-rose-700 hover:bg-rose-100"
+            disabled={activeTab === 'vocabulary' ? entries.length === 0 : keywordRows.length === 0}
+          >
+            {activeTab === 'vocabulary' ? '清空單字庫' : '清空關鍵字庫'}
+          </button>
+        </div>
       </div>
 
       <div className="rounded-xl border bg-white p-4">
-        <h2 className="mb-2 text-lg font-semibold">複習卡</h2>
+        <h2 className="mb-2 text-lg font-semibold">{activeTab === 'vocabulary' ? '單字複習卡' : '關鍵字複習卡'}</h2>
         <ul className="mb-3 list-disc space-y-1 pl-5 text-xs text-slate-500">
           {PROFICIENCY_OPTIONS.map((option) => (
             <li key={option.value}>
@@ -153,9 +236,11 @@ export default function VocabularyPage() {
             </li>
           ))}
         </ul>
-        {!current ? (
-          <p className="text-sm text-slate-500">目前沒有單字，先到章節練習加入單字。</p>
-        ) : (
+
+        {activeTab === 'vocabulary' && !current ? <p className="text-sm text-slate-500">目前沒有單字，先到章節練習加入單字。</p> : null}
+        {activeTab === 'keywords' && !currentKeyword ? <p className="text-sm text-slate-500">目前沒有關鍵字，先到章節練習加入關鍵字。</p> : null}
+
+        {activeTab === 'vocabulary' && current ? (
           <div className="space-y-3">
             <p className="text-sm text-slate-500">第 {reviewIndex + 1} / {reviewList.length} 張</p>
             <p className="text-2xl font-bold">{current.term}</p>
@@ -182,11 +267,7 @@ export default function VocabularyPage() {
               <p className="text-sm text-slate-500">先想看看意思，再按「顯示答案」</p>
             )}
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setRevealed((v) => !v)}
-                className="rounded border px-3 py-1 text-sm hover:bg-slate-50"
-              >
+              <button type="button" onClick={() => setRevealed((v) => !v)} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">
                 {revealed ? '隱藏答案' : '顯示答案'}
               </button>
               <button type="button" onClick={nextCard} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">
@@ -213,21 +294,56 @@ export default function VocabularyPage() {
               ))}
             </div>
           </div>
-        )}
+        ) : null}
+
+        {activeTab === 'keywords' && currentKeyword ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">第 {reviewIndex + 1} / {keywordRows.length} 張</p>
+            <p className="text-2xl font-bold">{currentKeyword.term}</p>
+            <p className="text-xs text-slate-500">來源題號：{currentKeyword.questionId}</p>
+            {revealed ? (
+              <>
+                <p className="text-lg text-amber-700">{currentKeyword.translation || '（尚未填寫）'}</p>
+                <p className="text-sm text-slate-700">{currentKeyword.definition || '（尚未填寫）'}</p>
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">先想看看意思，再按「顯示答案」</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setRevealed((v) => !v)} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">
+                {revealed ? '隱藏答案' : '顯示答案'}
+              </button>
+              <button type="button" onClick={nextCard} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">
+                下一張
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteKeywordEntry(currentKeyword.questionId, currentKeyword.term)}
+                className="rounded border border-rose-300 bg-rose-50 px-3 py-1 text-sm text-rose-700 hover:bg-rose-100"
+              >
+                移除此關鍵字
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-xl border bg-white p-4">
-        <h2 className="mb-1 text-lg font-semibold">單字清單</h2>
+        <h2 className="mb-1 text-lg font-semibold">{activeTab === 'vocabulary' ? '單字清單' : '關鍵字清單'}</h2>
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <p className="text-xs text-slate-500">每個單字都可按「編輯」修改英文、翻譯與解釋。</p>
-          <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={hydrateAllMissing}>
-            一鍵補上缺少翻譯/發音
-          </button>
+          <p className="text-xs text-slate-500">每筆資料都可按「編輯」修改英文、翻譯與解釋。</p>
+          {activeTab === 'vocabulary' && (
+            <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={hydrateAllMissing}>
+              一鍵補上缺少翻譯/發音
+            </button>
+          )}
         </div>
         {actionHint && <p className="mb-2 text-xs text-emerald-700">{actionHint}</p>}
-        {entries.length === 0 ? (
-          <p className="text-sm text-slate-500">尚無單字。</p>
-        ) : (
+
+        {activeTab === 'vocabulary' && entries.length === 0 ? <p className="text-sm text-slate-500">尚無單字。</p> : null}
+        {activeTab === 'keywords' && keywordRows.length === 0 ? <p className="text-sm text-slate-500">尚無關鍵字。</p> : null}
+
+        {activeTab === 'vocabulary' && entries.length > 0 ? (
           <ul className="space-y-2 text-sm">
             {entries.map((entry) => (
               <li key={entry.id} className="rounded border p-3">
@@ -322,7 +438,52 @@ export default function VocabularyPage() {
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
+
+        {activeTab === 'keywords' && keywordRows.length > 0 ? (
+          <ul className="space-y-2 text-sm">
+            {keywordRows.map((entry) => {
+              const keywordEditId = `${entry.questionId}::${entry.term.toLowerCase()}`;
+              return (
+                <li key={`${entry.questionId}-${entry.index}-${entry.term}`} className="rounded border p-3">
+                  {editingId === keywordEditId ? (
+                    <div className="space-y-2">
+                      <input className="w-full rounded border px-2 py-1" value={editTerm} onChange={(e) => setEditTerm(e.target.value)} />
+                      <input className="w-full rounded border px-2 py-1" value={editTranslation} onChange={(e) => setEditTranslation(e.target.value)} />
+                      <textarea className="w-full rounded border px-2 py-1" rows={2} value={editDefinition} onChange={(e) => setEditDefinition(e.target.value)} />
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => saveKeywordEdit(entry.questionId, entry.term)}>
+                          儲存
+                        </button>
+                        <button type="button" className="rounded border px-2 py-1 text-xs" onClick={cancelEdit}>
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="font-semibold">{entry.term} → {entry.translation || '（尚未填寫）'}</p>
+                      <p className="mt-1 text-xs text-slate-500">來源題號：{entry.questionId}</p>
+                      <p className="mt-1 text-slate-600">{entry.definition || '（尚未填寫）'}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => startEditKeyword(entry)}>
+                          編輯
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 hover:bg-rose-100"
+                          onClick={() => deleteKeywordEntry(entry.questionId, entry.term)}
+                        >
+                          刪除
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
       </div>
     </div>
   );
