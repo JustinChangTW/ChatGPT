@@ -1,35 +1,22 @@
-# SKILL.md
+# SKILL.md (Codex project skills)
 
-此專案的實作技能包（Project Skill Pack）。
+此檔定義 Codex 在本專案的可重用「技能流程」。
 
-## Skill A：Notebook 雙軌（共編 + 私人）
-### 目的
-確保筆記同時支援：
-- 共享知識（共編）
-- 個人反思（私人）
+## Skill 1: Notes dual-track
+- 目標：共編 + 私人筆記都可用。
+- 驗收：
+  - 練習頁可儲存共編/私人。
+  - 錯題本可查看兩種筆記。
 
-### 實作要點
-- 共編：走雲端服務（`shared-question-notes`）。
-- 私人：走 user-scope local storage（`private-question-notes`）。
-- 章節練習頁提供兩顆按鈕：
-  - 儲存私人筆記
-  - 儲存共編筆記
-- 錯題本需可讀取兩種筆記並明確標示。
+## Skill 2: Exam traceability
+- 目標：試券生成後可追蹤、作答中可更新。
+- 驗收：
+  - 生成試券即有紀錄。
+  - 交卷後同一筆紀錄更新為最終成績。
 
-## Skill B：Exam 可追溯紀錄
-### 目的
-避免「有作答但歷史空白」。
-
-### 實作要點
-- 產生試券時就建立草稿紀錄。
-- 作答過程持續 upsert 同一筆試券 id。
-- 交卷後覆寫為最終結果。
-
-## Skill C：Admin 權限可操作
-### 目的
-讓管理者設定流程可被一般人順利完成。
-
-### 實作要點
-- UI 顯示目前登入 UID。
-- 支援一鍵複製 UID 與 `users/{uid}` 路徑。
-- 提供角色設定教學（member/admin）。
+## Skill 3: Admin onboarding
+- 目標：管理者設定不靠猜。
+- 驗收：
+  - 畫面顯示當前 UID。
+  - 一鍵複製 `users/{uid}` 路徑。
+  - 有簡短設定步驟。

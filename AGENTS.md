@@ -1,39 +1,21 @@
-# AGENTS.md
+# AGENTS.md (for Codex)
 
-本檔提供在此專案中協作的通用規範（適用於整個 repo）。
+本檔**專門給 Codex 代理**在此 repo 工作時使用。
 
-## 1) 目標
-- 專案是 C|CT 練習平台（Next.js App Router + TypeScript）。
-- 支援本機優先，並可選擇 Firebase 同步。
-- 核心頁面：章節練習、模擬考、錯題本、知識庫、Admin。
+## Scope
+- 本檔作用範圍：整個 repository。
+- 若子目錄有更深層 `AGENTS.md`，以更深層為準。
 
-## 2) 開發優先順序
-1. 不破壞既有學習流程（作答、交卷、錯題本、歷史）。
-2. 安全優先（權限、資料可見範圍）。
-3. 可回溯（有紀錄、有狀態、有提示）。
-4. 可維護（服務層集中，避免在頁面內散落重複邏輯）。
+## 任務執行規範（Codex 必遵守）
+1. 先最小修正，再擴大重構。
+2. 任何 UI 行為改動，需補 `npm run -s lint` 驗證。
+3. 若 `npm run -s typecheck` 失敗，回報「是否為既有問題」與錯誤檔案。
+4. 權限邏輯一律走 `lib/services/*`，不要只在 UI 隱藏按鈕。
+5. 筆記功能需同時考慮：
+   - 共編筆記（shared）
+   - 私人筆記（private）
 
-## 3) 程式規範
-- 使用 TypeScript，避免 `any`。
-- 優先復用 `lib/services/*`，不要把資料邏輯直接塞進頁面元件。
-- localStorage key 命名需有 `cct_` 前綴並版本化（例如 `_v1`）。
-- UI 文案以繁中為主，保持簡潔。
-- 不要在 import 外層加 try/catch。
-
-## 4) 權限與資料界線（目前規格）
-- 題庫匯入：僅 admin。
-- 系統參數（AI/API）：僅 admin。
-- 作答記錄：私人（user scope）。
-- 解題筆記：支援「共編」與「私人」兩種。
-- 錯題本需可查看筆記（共編 + 私人）。
-
-## 5) 變更檢查
-提交前至少執行：
-- `npm run -s lint`
-- `npm run -s build`（若是 UI/頁面流程異動）
-- `npm run -s typecheck`（若失敗需在 PR 清楚註明原因）
-
-## 6) 文件同步
-- 功能行為異動時，請同步更新：
-  - `規格.md`（功能規格）
-  - 必要時 `README.md`（使用方式）
+## 回覆格式（Codex）
+- Summary：改了哪些檔、目的。
+- Testing：列出執行命令與結果。
+- 已知問題：若有 blocker 必須明講。
