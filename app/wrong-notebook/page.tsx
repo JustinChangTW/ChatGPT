@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { CSSProperties, ReactNode, useEffect, useMemo, useState } from 'react';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { loadQuestionBank } from '@/lib/services/local-question-bank';
 import { loadWrongNotebook } from '@/lib/services/wrong-notebook-storage';
@@ -193,6 +193,7 @@ export default function WrongNotebookPage() {
   const [sortBy, setSortBy] = useState<'wrongRate' | 'wrongCount' | 'attempts' | 'recent'>('wrongRate');
   const [layoutMode, setLayoutMode] = useState<'splitList' | 'splitBalanced' | 'splitDetail' | 'stacked' | 'drawer'>('splitBalanced');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailPanelPercent, setDetailPanelPercent] = useState(50);
   const [drawerWidth, setDrawerWidth] = useState(760);
   const [isResizingDrawer, setIsResizingDrawer] = useState(false);
   const [askByQuestion, setAskByQuestion] = useState<Record<string, string>>({});
@@ -413,6 +414,9 @@ export default function WrongNotebookPage() {
               const mode = e.target.value as 'splitList' | 'splitBalanced' | 'splitDetail' | 'stacked' | 'drawer';
               setLayoutMode(mode);
               setDrawerOpen(false);
+              if (mode === 'splitList') setDetailPanelPercent(40);
+              if (mode === 'splitBalanced') setDetailPanelPercent(50);
+              if (mode === 'splitDetail') setDetailPanelPercent(60);
             }}
           >
             <option value="splitList">雙欄：列表優先</option>
@@ -421,6 +425,23 @@ export default function WrongNotebookPage() {
             <option value="stacked">上下堆疊</option>
             <option value="drawer">右側抽屜</option>
           </select>
+          {layoutMode !== 'drawer' && (
+            <>
+              <label className="ml-2 text-xs text-slate-500">詳情寬度</label>
+              <div className="flex gap-1">
+                {[50, 70, 90, 100].map((percent) => (
+                  <button
+                    key={percent}
+                    type="button"
+                    className={`rounded border px-2 py-1 text-xs ${detailPanelPercent === percent ? 'bg-slate-900 text-white' : 'bg-white'}`}
+                    onClick={() => setDetailPanelPercent(percent)}
+                  >
+                    {percent}%
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <span className="text-xs text-slate-500">共 {filtered.length} 題</span>
         </div>
       </div>
@@ -465,17 +486,17 @@ export default function WrongNotebookPage() {
         );
 
         if (layoutMode === 'stacked') {
-          return <div className="space-y-3">{listBlock}{detailBlock}</div>;
+          return detailPanelPercent === 100 ? <div>{detailBlock}</div> : <div className="space-y-3">{listBlock}{detailBlock}</div>;
         }
         if (layoutMode === 'drawer') {
           return (
             <>
               {listBlock}
               {drawerOpen && (
-                <div className="fixed inset-0 z-40 flex">
-                  <button type="button" className="h-full w-full bg-black/20" onClick={() => setDrawerOpen(false)} />
+                <div className="fixed inset-0 z-40">
+                  <button type="button" className="absolute inset-0 bg-black/20" onClick={() => setDrawerOpen(false)} />
                   <div
-                    className="relative h-full overflow-auto border-l bg-slate-100 p-3"
+                    className="absolute right-0 top-0 h-full overflow-auto border-l bg-slate-100 p-3"
                     style={{ width: `${drawerWidth}px`, maxWidth: '100vw' }}
                   >
                     <button
@@ -500,13 +521,15 @@ export default function WrongNotebookPage() {
           );
         }
 
-        const gridClass =
-          layoutMode === 'splitList'
-            ? 'lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'
-            : layoutMode === 'splitDetail'
-              ? 'lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]'
-              : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]';
-        return <div className={`grid gap-3 ${gridClass}`}>{listBlock}{detailBlock}</div>;
+        if (detailPanelPercent === 100) return <div>{detailBlock}</div>;
+        const listPercent = Math.max(8, 100 - detailPanelPercent);
+        const cols = `${listPercent}% ${detailPanelPercent}%`;
+        return (
+          <div className="grid gap-3 lg:[grid-template-columns:var(--wn-cols)]" style={{ '--wn-cols': cols } as CSSProperties}>
+            {listBlock}
+            {detailBlock}
+          </div>
+        );
       })()}
     </div>
   );
