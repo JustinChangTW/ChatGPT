@@ -341,6 +341,10 @@ export default function WrongNotebookPage() {
   }, [isResizingDrawer]);
 
   const selected = useMemo(() => enriched.find((x) => x.questionId === selectedId) ?? null, [enriched, selectedId]);
+  const setDrawerViewportRatio = (ratio: number) => {
+    if (typeof window === 'undefined') return;
+    setDrawerWidth(Math.round(window.innerWidth * ratio));
+  };
 
   const sendAsk = async (questionId: string, stem: string, explanation: string) => {
     const userText = (askByQuestion[questionId] ?? '').trim();
@@ -472,7 +476,7 @@ export default function WrongNotebookPage() {
                   <button type="button" className="h-full w-full bg-black/20" onClick={() => setDrawerOpen(false)} />
                   <div
                     className="relative h-full overflow-auto border-l bg-slate-100 p-3"
-                    style={{ width: `${drawerWidth}px`, maxWidth: '96vw' }}
+                    style={{ width: `${drawerWidth}px`, maxWidth: '100vw' }}
                   >
                     <button
                       type="button"
@@ -484,6 +488,8 @@ export default function WrongNotebookPage() {
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerWidth(460)}>最小</button>
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerWidth(760)}>中</button>
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerWidth(980)}>最大</button>
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerViewportRatio(0.9)}>90%</button>
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerViewportRatio(0.98)}>100%</button>
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerOpen(false)}>關閉</button>
                     </div>
                     {detailBlock}
