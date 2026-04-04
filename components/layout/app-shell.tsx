@@ -5,14 +5,14 @@ import { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 
 const navItems = [
-  ['Dashboard', '/dashboard'],
+  ['儀表板', '/dashboard'],
   ['章節練習', '/practice/chapter'],
   ['正式模擬考', '/exam'],
   ['知識庫', '/knowledge-base'],
   ['單字庫', '/vocabulary'],
   ['錯題本', '/wrong-notebook'],
   ['歷史分析', '/history'],
-  ['Admin', '/admin']
+  ['管理後台', '/admin']
 ];
 
 export function AppShell({
@@ -43,7 +43,7 @@ export function AppShell({
       <main className="mx-auto max-w-6xl px-3 py-4 pb-24 sm:px-4 sm:py-6 sm:pb-6">{children}</main>
       <footer className="border-t bg-white">
         <div className="mx-auto max-w-6xl px-4 py-3 text-xs text-slate-500">
-          Build: v{buildInfo.version} · {buildInfo.buildTime}
+          版本：v{buildInfo.version} · 建置時間：{buildInfo.buildTime}
         </div>
       </footer>
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 px-2 py-2 backdrop-blur sm:hidden">

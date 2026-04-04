@@ -405,7 +405,7 @@ export default function ChapterPracticePage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Chapter Practice</h1>
+      <h1 className="text-2xl font-bold">章節練習</h1>
       <p className="text-sm text-slate-500">目前本機題庫：{bank.length} 題（含 Admin 匯入）</p>
       <div className="grid gap-2 sm:flex sm:items-center">
         <div className="rounded-lg border bg-white px-3 py-2 text-sm">

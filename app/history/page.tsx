@@ -14,7 +14,7 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">History / Analytics</h1>
+      <h1 className="text-2xl font-bold">歷史分析</h1>
       {summary ? (
         <div className="rounded border bg-white p-3 text-sm">
           <p>總測驗次數：{records.length}</p>

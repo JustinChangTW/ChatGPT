@@ -3,7 +3,7 @@ import { sampleQuestions } from '@/lib/mocks/sample-questions';
 export default function ResultPage() {
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Result</h1>
+      <h1 className="text-2xl font-bold">作答結果</h1>
       <div className="rounded border bg-white p-4">
         <p>總分：80 / 100</p>
         <p>答對率：80%</p>

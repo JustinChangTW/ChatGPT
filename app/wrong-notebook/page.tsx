@@ -402,7 +402,7 @@ export default function WrongNotebookPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Wrong Answer Notebook</h1>
+      <h1 className="text-2xl font-bold">錯題本</h1>
       <p className="text-sm text-slate-500">快速找出高錯誤題、即時篩選、右側固定詳情快速複習。</p>
 
       <div className="grid gap-2 sm:grid-cols-4">

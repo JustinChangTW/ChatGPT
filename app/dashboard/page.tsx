@@ -58,7 +58,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <h1 className="text-2xl font-bold">儀表板</h1>
       <div className="grid gap-4 md:grid-cols-3">
         <Card title="今日練習次數">{stats.todayAttempts}</Card>
         <Card title="總答題數">{stats.totalAnswered}</Card>

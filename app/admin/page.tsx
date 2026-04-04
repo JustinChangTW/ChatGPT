@@ -959,7 +959,7 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Admin 題庫管理</h1>
+      <h1 className="text-2xl font-bold">管理後台（題庫與設定）</h1>
       <p className="text-sm text-slate-500">依使用流程分區：先做身份與同步，再調整 API，最後做題庫匯入管理。</p>
       <div className="rounded-xl border bg-white p-2">
         <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
