@@ -193,6 +193,8 @@ export default function WrongNotebookPage() {
   const [sortBy, setSortBy] = useState<'wrongRate' | 'wrongCount' | 'attempts' | 'recent'>('wrongRate');
   const [layoutMode, setLayoutMode] = useState<'splitList' | 'splitBalanced' | 'splitDetail' | 'stacked' | 'drawer'>('splitBalanced');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerWidth, setDrawerWidth] = useState(760);
+  const [isResizingDrawer, setIsResizingDrawer] = useState(false);
   const [askByQuestion, setAskByQuestion] = useState<Record<string, string>>({});
   const [isAskingByQuestion, setIsAskingByQuestion] = useState<Record<string, boolean>>({});
   const [aiErrorByQuestion, setAiErrorByQuestion] = useState<Record<string, string>>({});
@@ -321,6 +323,22 @@ export default function WrongNotebookPage() {
     })();
     return () => { alive = false; };
   }, [currentUserId, selectedId]);
+
+  useEffect(() => {
+    if (!isResizingDrawer) return;
+    const handleMove = (event: MouseEvent) => {
+      const viewport = window.innerWidth;
+      const next = Math.min(Math.max(viewport - event.clientX, 420), Math.min(1100, viewport - 24));
+      setDrawerWidth(next);
+    };
+    const handleUp = () => setIsResizingDrawer(false);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isResizingDrawer]);
 
   const selected = useMemo(() => enriched.find((x) => x.questionId === selectedId) ?? null, [enriched, selectedId]);
 
@@ -452,8 +470,20 @@ export default function WrongNotebookPage() {
               {drawerOpen && (
                 <div className="fixed inset-0 z-40 flex">
                   <button type="button" className="h-full w-full bg-black/20" onClick={() => setDrawerOpen(false)} />
-                  <div className="h-full w-[min(680px,92vw)] overflow-auto border-l bg-slate-100 p-3">
-                    <div className="mb-2 flex justify-end">
+                  <div
+                    className="relative h-full overflow-auto border-l bg-slate-100 p-3"
+                    style={{ width: `${drawerWidth}px`, maxWidth: '96vw' }}
+                  >
+                    <button
+                      type="button"
+                      className="absolute left-0 top-0 h-full w-2 -translate-x-1/2 cursor-col-resize bg-transparent"
+                      onMouseDown={() => setIsResizingDrawer(true)}
+                      aria-label="調整抽屜寬度"
+                    />
+                    <div className="mb-2 flex flex-wrap justify-end gap-1">
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerWidth(460)}>最小</button>
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerWidth(760)}>中</button>
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerWidth(980)}>最大</button>
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerOpen(false)}>關閉</button>
                     </div>
                     {detailBlock}
