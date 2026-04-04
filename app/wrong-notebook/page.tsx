@@ -191,6 +191,8 @@ export default function WrongNotebookPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [masteredFilter, setMasteredFilter] = useState<'all' | 'mastered' | 'unmastered'>('all');
   const [sortBy, setSortBy] = useState<'wrongRate' | 'wrongCount' | 'attempts' | 'recent'>('wrongRate');
+  const [layoutMode, setLayoutMode] = useState<'splitList' | 'splitBalanced' | 'splitDetail' | 'stacked' | 'drawer'>('splitBalanced');
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [askByQuestion, setAskByQuestion] = useState<Record<string, string>>({});
   const [isAskingByQuestion, setIsAskingByQuestion] = useState<Record<string, boolean>>({});
   const [aiErrorByQuestion, setAiErrorByQuestion] = useState<Record<string, string>>({});
@@ -381,38 +383,95 @@ export default function WrongNotebookPage() {
             <option value="attempts">attempts</option>
             <option value="recent">recent</option>
           </select>
+          <label className="ml-2 text-xs text-slate-500">版型</label>
+          <select
+            className="rounded border px-2 py-1 text-sm"
+            value={layoutMode}
+            onChange={(e) => {
+              const mode = e.target.value as 'splitList' | 'splitBalanced' | 'splitDetail' | 'stacked' | 'drawer';
+              setLayoutMode(mode);
+              setDrawerOpen(false);
+            }}
+          >
+            <option value="splitList">雙欄：列表優先</option>
+            <option value="splitBalanced">雙欄：平均</option>
+            <option value="splitDetail">雙欄：詳情優先</option>
+            <option value="stacked">上下堆疊</option>
+            <option value="drawer">右側抽屜</option>
+          </select>
           <span className="text-xs text-slate-500">共 {filtered.length} 題</span>
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <div className="space-y-2 rounded-xl border bg-slate-50 p-2">
-          {visibleRows.length === 0 ? <p className="rounded-lg border bg-white p-3 text-sm text-slate-500">沒有符合篩選條件的錯題。</p> : visibleRows.map((row) => (
-            <WrongRowItem key={row.questionId} row={row} selected={row.questionId === selectedId} onSelect={() => setSelectedId(row.questionId)} />
-          ))}
-          {visibleCount < filtered.length && (
-            <div className="flex justify-center pt-1">
-              <button className="rounded border bg-white px-3 py-1 text-sm hover:bg-slate-50" onClick={() => setVisibleCount((v) => v + 10)}>顯示更多</button>
-            </div>
-          )}
-        </div>
+      {(() => {
+        const listBlock = (
+          <div className="space-y-2 rounded-xl border bg-slate-50 p-2">
+            {visibleRows.length === 0 ? <p className="rounded-lg border bg-white p-3 text-sm text-slate-500">沒有符合篩選條件的錯題。</p> : visibleRows.map((row) => (
+              <WrongRowItem
+                key={row.questionId}
+                row={row}
+                selected={row.questionId === selectedId}
+                onSelect={() => {
+                  setSelectedId(row.questionId);
+                  if (layoutMode === 'drawer') setDrawerOpen(true);
+                }}
+              />
+            ))}
+            {visibleCount < filtered.length && (
+              <div className="flex justify-center pt-1">
+                <button className="rounded border bg-white px-3 py-1 text-sm hover:bg-slate-50" onClick={() => setVisibleCount((v) => v + 10)}>顯示更多</button>
+              </div>
+            )}
+          </div>
+        );
+        const detailBlock = (
+          <DetailPanel
+            row={selected}
+            keywordHints={selectedId ? keywordHintsByQuestion[selectedId] ?? [] : []}
+            renderStemWithKeywordUnderline={renderStemWithKeywordUnderline}
+            notes={selectedId ? notesByQuestion[selectedId] ?? { shared: '', private: '' } : { shared: '', private: '' }}
+            chat={selectedId ? chat[selectedId] ?? [] : []}
+            aiError={selectedId ? aiErrorByQuestion[selectedId] ?? '' : ''}
+            askValue={selectedId ? askByQuestion[selectedId] ?? '' : ''}
+            setAskValue={(v) => selectedId && setAskByQuestion((prev) => ({ ...prev, [selectedId]: v }))}
+            asking={selectedId ? !!isAskingByQuestion[selectedId] : false}
+            onSendAsk={() => {
+              if (!selectedId || !selected?.question) return;
+              void sendAsk(selectedId, selected.question.stem, selected.question.explanation);
+            }}
+          />
+        );
 
-        <DetailPanel
-          row={selected}
-          keywordHints={selectedId ? keywordHintsByQuestion[selectedId] ?? [] : []}
-          renderStemWithKeywordUnderline={renderStemWithKeywordUnderline}
-          notes={selectedId ? notesByQuestion[selectedId] ?? { shared: '', private: '' } : { shared: '', private: '' }}
-          chat={selectedId ? chat[selectedId] ?? [] : []}
-          aiError={selectedId ? aiErrorByQuestion[selectedId] ?? '' : ''}
-          askValue={selectedId ? askByQuestion[selectedId] ?? '' : ''}
-          setAskValue={(v) => selectedId && setAskByQuestion((prev) => ({ ...prev, [selectedId]: v }))}
-          asking={selectedId ? !!isAskingByQuestion[selectedId] : false}
-          onSendAsk={() => {
-            if (!selectedId || !selected?.question) return;
-            void sendAsk(selectedId, selected.question.stem, selected.question.explanation);
-          }}
-        />
-      </div>
+        if (layoutMode === 'stacked') {
+          return <div className="space-y-3">{listBlock}{detailBlock}</div>;
+        }
+        if (layoutMode === 'drawer') {
+          return (
+            <>
+              {listBlock}
+              {drawerOpen && (
+                <div className="fixed inset-0 z-40 flex">
+                  <button type="button" className="h-full w-full bg-black/20" onClick={() => setDrawerOpen(false)} />
+                  <div className="h-full w-[min(680px,92vw)] overflow-auto border-l bg-slate-100 p-3">
+                    <div className="mb-2 flex justify-end">
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs" onClick={() => setDrawerOpen(false)}>關閉</button>
+                    </div>
+                    {detailBlock}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        }
+
+        const gridClass =
+          layoutMode === 'splitList'
+            ? 'lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'
+            : layoutMode === 'splitDetail'
+              ? 'lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]'
+              : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]';
+        return <div className={`grid gap-3 ${gridClass}`}>{listBlock}{detailBlock}</div>;
+      })()}
     </div>
   );
 }
