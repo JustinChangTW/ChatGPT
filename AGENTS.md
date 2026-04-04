@@ -1,85 +1,21 @@
-# AGENTS.md
+# AGENTS.md (for Codex)
 
-## Working agreements
+本檔**專門給 Codex 代理**在此 repo 工作時使用。
 
-This repository is a Next.js application deployed through GitHub Pages, with Firebase used for authentication and data persistence. The project includes question-bank import, diagnostics, and Firebase sync behavior.
+## Scope
+- 本檔作用範圍：整個 repository。
+- 若子目錄有更深層 `AGENTS.md`，以更深層為準。
 
-## Primary goals
-- Keep the app deployable to GitHub Pages.
-- Preserve Firebase connectivity and client-side configuration.
-- Preserve question-bank import compatibility.
-- Prefer minimal diffs and avoid unrelated refactors.
+## 任務執行規範（Codex 必遵守）
+1. 先最小修正，再擴大重構。
+2. 任何 UI 行為改動，需補 `npm run -s lint` 驗證。
+3. 若 `npm run -s typecheck` 失敗，回報「是否為既有問題」與錯誤檔案。
+4. 權限邏輯一律走 `lib/services/*`，不要只在 UI 隱藏按鈕。
+5. 筆記功能需同時考慮：
+   - 共編筆記（shared）
+   - 私人筆記（private）
 
-## Allowed scope
-You may edit:
-- `app/**`
-- `components/**`
-- `lib/**`
-- `public/**`
-- `styles/**`
-- app-specific config files
-
-Avoid editing unless explicitly required:
-- lockfiles
-- Firebase project settings
-- GitHub Actions workflows
-- Firestore rules
-- large generated data files
-- deployment environment names
-
-## Exploration order
-1. Read `README.md`.
-2. Read the target page, component, or utility being changed.
-3. Read adjacent import / sync / diagnostic code before editing it.
-4. Reuse existing patterns before introducing new abstractions.
-
-## Implementation preferences
-- Prefer minimal diffs.
-- Preserve current behavior unless the task explicitly requires a change.
-- Do not silently rename environment variables.
-- Do not change JSON import formats without updating validators, diagnostics, and UI messaging together.
-- Do not invent question-bank content.
-- Preserve source fidelity for imported questions and explanations.
-
-## Firebase handling
-- Treat Firebase config keys and collection names as compatibility-sensitive.
-- Do not casually change auth flow, Firestore paths, or import schema.
-- If a change touches Firebase write/read logic, verify both write and read paths.
-- If a change touches diagnostics, preserve explicit success/fail logs.
-
-## Question-bank handling
-- Preserve compatibility for the currently supported import schema.
-- If schema changes are necessary, update all of the following together:
-  - parser
-  - validator
-  - import UI
-  - diagnostic flow
-  - documentation
-- Keep chapter / domain / subdomain behavior internally consistent.
-- Do not remove explanation fields or weaken import validation silently.
-
-## Validation
-After a meaningful code change, run the smallest relevant checks available in the project.
-
-At minimum, validate:
-- the app still builds
-- the affected UI path loads
-- the import flow still accepts the supported JSON format
-- Firebase-dependent paths fail clearly when config is missing
-- diagnostics still distinguish success, timeout, and permission failures
-
-If existing scripts already cover this, prefer the repo’s current scripts instead of inventing new ones.
-
-## Final handoff
-Always report:
-- files changed
-- why those files changed
-- what was validated
-- remaining risks or unverified areas
-
-## Never do these by default
-- do not rewrite the whole app
-- do not switch deployment strategy
-- do not replace Firebase with another backend
-- do not change GitHub Pages assumptions
-- do not modify secrets, workflow names, or environment names without explicit instruction
+## 回覆格式（Codex）
+- Summary：改了哪些檔、目的。
+- Testing：列出執行命令與結果。
+- 已知問題：若有 blocker 必須明講。

@@ -15,6 +15,10 @@ function aiTutorReply(question: string, explanation: string, history: { role: 'u
   return `AI 助教（示範）\n你問：「${latest}」\n\n重點：${question}\n建議理解方向：${explanation}\n\n追問建議：\n1) 這題考點和常見陷阱是什麼？\n2) 若換成實作題要怎麼判斷？\n3) 請用一步一步方式再解一次。`;
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export default function WrongNotebookPage() {
   const [openedId, setOpenedId] = useState<string | null>(null);
   const [askByQuestion, setAskByQuestion] = useState<Record<string, string>>({});
@@ -72,7 +76,7 @@ export default function WrongNotebookPage() {
         .map((term) => {
           const entry = lookupDictionaryTerm(term);
           if (entry) return { term: entry.term, translation: entry.translation };
-          if (!dictTerms.has(term)) return { term, translation: '（無內建翻譯）' };
+          if (!dictTerms.has(term)) return { term, translation: '' };
           return null;
         })
         .filter((x): x is { term: string; translation: string } => !!x)
@@ -141,6 +145,23 @@ export default function WrongNotebookPage() {
         })}
       </div>
     );
+  };
+
+  const renderStemWithKeywordUnderline = (stem: string, terms: string[]): ReactNode => {
+    if (!terms.length) return stem;
+    const uniqueTerms = Array.from(new Set(terms.map((x) => x.trim()).filter(Boolean))).sort((a, b) => b.length - a.length);
+    if (!uniqueTerms.length) return stem;
+    const regex = new RegExp(`(${uniqueTerms.map((x) => escapeRegExp(x)).join('|')})`, 'ig');
+    const parts = stem.split(regex);
+    return parts.map((part, idx) => {
+      const matched = uniqueTerms.some((term) => term.toLowerCase() === part.toLowerCase());
+      if (!matched) return <span key={`stem-${idx}`}>{part}</span>;
+      return (
+        <u key={`stem-${idx}`} className="decoration-2 underline-offset-2">
+          {part}
+        </u>
+      );
+    });
   };
 
   return (
@@ -245,7 +266,7 @@ export default function WrongNotebookPage() {
             const keywordHints = keywordHintsByQuestion[openedId] ?? [];
             return (
               <div className="space-y-3">
-                <h2 className="text-lg font-semibold">{q.stem}</h2>
+                <h2 className="text-lg font-semibold">{renderStemWithKeywordUnderline(q.stem, keywordHints.map((x) => x.term))}</h2>
                 <ul className="list-disc space-y-1 pl-5 text-sm">
                   {q.options.map((o) => (
                     <li key={o.key}>
@@ -269,7 +290,7 @@ export default function WrongNotebookPage() {
                           className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-xs text-amber-900"
                           title={entry.translation}
                         >
-                          {entry.term} · {entry.translation}
+                          {entry.translation ? `${entry.term} · ${entry.translation}` : entry.term}
                         </span>
                       ))}
                     </div>
