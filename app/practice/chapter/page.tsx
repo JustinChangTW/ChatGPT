@@ -16,6 +16,7 @@ import { fetchRealtimeTranslation } from '@/lib/services/realtime-translation';
 import { loadCustomKeywords, saveCustomKeywords } from '@/lib/services/custom-keyword-storage';
 import { auth } from '@/lib/firebase/client';
 import { loadSharedQuestionNote, saveSharedQuestionNote } from '@/lib/services/shared-question-notes';
+import { loadPrivateQuestionNote, savePrivateQuestionNote } from '@/lib/services/private-question-notes';
 
 const fallbackChapters = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Chapter 6', 'Chapter 7', 'Chapter 8'];
 
@@ -332,6 +333,12 @@ export default function ChapterPracticePage() {
     if (!current?.id) return;
     let alive = true;
     void (async () => {
+      const privateNote = loadPrivateQuestionNote(currentUserId, current.id);
+      if (alive && privateNote.trim().length > 0) {
+        setNotesByQuestion((prev) => ({ ...prev, [current.id]: privateNote }));
+        setSharedNoteStatus('已載入你的私人筆記。');
+        return;
+      }
       const shared = await loadSharedQuestionNote(current.id);
       if (!alive || !shared) return;
       setNotesByQuestion((prev) => {
@@ -345,12 +352,18 @@ export default function ChapterPracticePage() {
     return () => {
       alive = false;
     };
-  }, [current?.id]);
+  }, [current?.id, currentUserId]);
 
   const saveCurrentSharedNote = async () => {
     if (!current) return;
     const res = await saveSharedQuestionNote(current.id, currentNote);
     setSharedNoteStatus(res.ok ? '已儲存到共編筆記。' : `共編筆記儲存失敗：${res.reason}`);
+  };
+
+  const saveCurrentPrivateNote = () => {
+    if (!current) return;
+    savePrivateQuestionNote(currentUserId, current.id, currentNote);
+    setSharedNoteStatus('已儲存到你的私人筆記。');
   };
 
   const applyMarkdownSyntax = (syntax: 'bold' | 'h2' | 'bullet' | 'code') => {
@@ -622,6 +635,9 @@ export default function ChapterPracticePage() {
                   <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bold')}>粗體</button>
                   <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('bullet')}>清單</button>
                   <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => applyMarkdownSyntax('code')}>Code</button>
+                  <button type="button" className="rounded border border-slate-300 bg-white px-2 py-1" onClick={saveCurrentPrivateNote}>
+                    儲存私人筆記
+                  </button>
                   <button type="button" className="rounded border border-indigo-300 bg-white px-2 py-1" onClick={() => void saveCurrentSharedNote()}>
                     儲存共編筆記
                   </button>

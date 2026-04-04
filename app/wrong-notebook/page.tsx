@@ -1,10 +1,13 @@
 'use client';
 
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { sampleQuestions } from '@/lib/mocks/sample-questions';
 import { loadQuestionBank } from '@/lib/services/local-question-bank';
 import { loadWrongNotebook } from '@/lib/services/wrong-notebook-storage';
 import { requestAITutorReplyDebug } from '@/lib/services/ai-tutor-client';
+import { loadSharedQuestionNote } from '@/lib/services/shared-question-notes';
+import { loadPrivateQuestionNote } from '@/lib/services/private-question-notes';
+import { auth } from '@/lib/firebase/client';
 
 function aiTutorReply(question: string, explanation: string, history: { role: 'user' | 'assistant'; text: string }[]): string {
   const latest = history[history.length - 1]?.text ?? '';
@@ -18,6 +21,8 @@ export default function WrongNotebookPage() {
   const [aiErrorByQuestion, setAiErrorByQuestion] = useState<Record<string, string>>({});
   const [chat, setChat] = useState<Record<string, { role: 'user' | 'assistant'; text: string }[]>>({});
   const [wrongRows] = useState(() => loadWrongNotebook());
+  const [notesByQuestion, setNotesByQuestion] = useState<Record<string, { shared: string; private: string }>>({});
+  const currentUserId = auth?.currentUser?.uid ?? 'local-user';
 
   const questionPool = useMemo(() => {
     const local = loadQuestionBank();
@@ -53,6 +58,26 @@ export default function WrongNotebookPage() {
     setChat((s) => ({ ...s, [questionId]: [...nextHistory, { role: 'assistant', text: reply }] }));
     setAskByQuestion((prev) => ({ ...prev, [questionId]: '' }));
   };
+
+  useEffect(() => {
+    if (!openedId) return;
+    let alive = true;
+    void (async () => {
+      const shared = await loadSharedQuestionNote(openedId);
+      const privateNote = loadPrivateQuestionNote(currentUserId, openedId);
+      if (!alive) return;
+      setNotesByQuestion((prev) => ({
+        ...prev,
+        [openedId]: {
+          shared: shared?.content ?? '',
+          private: privateNote
+        }
+      }));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [openedId, currentUserId]);
 
   const renderAiMarkdown = (text: string): ReactNode => {
     const lines = text.split('\n').map((x) => x.trimEnd());
@@ -143,6 +168,8 @@ export default function WrongNotebookPage() {
             const q = row.question;
             const history = chat[openedId] ?? [];
             const aiError = aiErrorByQuestion[openedId] ?? '';
+            const sharedNote = notesByQuestion[openedId]?.shared ?? '';
+            const privateNote = notesByQuestion[openedId]?.private ?? '';
             return (
               <div className="space-y-3">
                 <h2 className="text-lg font-semibold">{q.stem}</h2>
@@ -157,6 +184,22 @@ export default function WrongNotebookPage() {
                   正確答案：{Array.isArray(q.correctAnswer) ? q.correctAnswer.join(', ') : q.correctAnswer}
                 </p>
                 <p className="text-sm">詳解：{q.explanation}</p>
+
+                <div className="rounded border bg-slate-50 p-3 text-sm">
+                  <p className="font-semibold">題目筆記</p>
+                  <p className="mt-1 text-xs text-slate-500">共編筆記供所有人查看；私人筆記只有你自己可見。</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <div className="rounded border bg-white p-2">
+                      <p className="text-xs font-semibold text-indigo-700">共編筆記</p>
+                      <p className="mt-1 whitespace-pre-wrap text-xs text-slate-700">{sharedNote || '尚無共編筆記。'}</p>
+                    </div>
+                    <div className="rounded border bg-white p-2">
+                      <p className="text-xs font-semibold text-slate-700">私人筆記（你）</p>
+                      <p className="mt-1 whitespace-pre-wrap text-xs text-slate-700">{privateNote || '尚無私人筆記。'}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">可到章節練習頁該題編寫/更新筆記（支援儲存私人與共編）。</p>
+                </div>
 
                 <div className="rounded border bg-slate-50 p-3">
                   <p className="mb-2 font-semibold">AI 助教互動（可追問）</p>
